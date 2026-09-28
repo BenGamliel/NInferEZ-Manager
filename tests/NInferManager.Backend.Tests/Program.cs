@@ -14,6 +14,17 @@ try
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5080")=="sm120a"&&EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5090")=="sm120a","RTX 5000 Series maps to the Blackwell sm120a package");
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 4090")=="sm89","RTX 4000 Series maps to sm89");
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 3090")=="sm86","RTX 3000 Series maps to sm86");
+    Directory.CreateDirectory(paths.EngineDirectory);
+    await File.WriteAllBytesAsync(Path.Combine(paths.EngineDirectory,"ninfer-serve.exe"),[0]);
+    await File.WriteAllTextAsync(Path.Combine(paths.EngineDirectory,"engine-manifest.json"),"""
+        {"product":"NInferEZ Engine","contractVersion":1,"engineVersion":"0.1.0-preview.1","cudaArchitecture":"sm120a"}
+        """);
+    using(var enginePackages=new EnginePackageService(paths,new ManagerLog(paths),settings))
+    {
+        var engineLibrary=await enginePackages.SnapshotAsync();
+        Assert(enginePackages.ActiveDirectory==paths.EngineDirectory,"bundled engine remains the active launch directory when no managed engine is selected");
+        Assert(engineLibrary.ActiveArchitecture=="sm120a"&&engineLibrary.Packages.Single(x=>x.CudaArchitecture=="sm120a").Active,"bundled engine manifest is recognized as the installed active package");
+    }
     Assert(EditableSettingTypes.Supports(typeof(string))&&EditableSettingTypes.Supports(typeof(bool))&&EditableSettingTypes.Supports(typeof(int))&&EditableSettingTypes.Supports(typeof(double?))&&EditableSettingTypes.Supports(typeof(KvPrecision)),"advanced settings accept supported scalar types");
     Assert(!EditableSettingTypes.Supports(typeof(Dictionary<string,string>))&&!EditableSettingTypes.Supports(typeof(Dictionary<string,ModelProfile>))&&!EditableSettingTypes.Supports(typeof(DateTimeOffset?)),"advanced settings reject dictionaries and unsupported complex types");
     var catalog=new ModelCatalog(paths,settings);

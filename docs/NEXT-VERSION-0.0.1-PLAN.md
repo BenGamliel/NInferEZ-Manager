@@ -1,6 +1,7 @@
 # NInferEZ Manager 0.0.1 — Product and Development Plan
 
-מסמך זה מגדיר את הגרסה הבאה של NInferEZ Manager. זהו מסמך תכנון בלבד: הוא אינו משנה את המנוע, אינו בונה חבילות ואינו משנה את הגרסה הנוכחית שעובדת.
+מסמך זה הוא תוכנית המוצר ומסמך המעקב החי של NInferEZ Manager 0.0.1. הוא מתעד גם את היעד
+וגם את מצב המימוש בפועל; סעיף 19 הוא מקור האמת להתקדמות, לבדיקות ולשלבים שעדיין פתוחים.
 
 ## 1. מטרת המוצר
 
@@ -793,14 +794,13 @@ NInferEZ Manager/
 15. אין מידע אישי, נתיבים מקומיים או credentials בחבילות.
 16. כל build שמור וממוספר, בעוד גרסת המוצר שמוצגת נשארת `0.0.1`.
 
-## 18. החלטות שיש לקבע בתחילת המימוש
+## 18. החלטות מוצר וטכנולוגיה שנקבעו
 
 ברירת המחדל המומלצת במסמך זה היא:
 
-- Model Catalog במאגר data-only נפרד.
+- Model Catalog כ־feed data-only שבשליטת מאגר NInferEZ Manager, עם snapshot מוטמע לעבודה offline.
 - Engine Channel במאגר NInferEZ Engine הקיים.
-- App Releases במאגר GitHub רשמי ונפרד של NInferEZ Manager תחת אותו publisher; המאגר המקומי
-  עדיין אינו Git repository ולכן יצירתו ופרסום Release חתום/מאומת הם תנאי לחיבור updater אמיתי.
+- App Releases מהמאגר הציבורי הרשמי `BenGamliel/NInferEZ-Manager`.
 - ערוץ `stable` כברירת מחדל ו־`preview` תחת Advanced.
 - `Auto — fastest safe` כברירת מחדל.
 - in-app notifications; tray notifications רק באישור משתמש.
@@ -808,7 +808,48 @@ NInferEZ Manager/
 - build פיתוח משתמש במנוע משותף; RC/final מקבלים חבילות מלאות.
 - שני המודלים שלנו בלבד מוצגים כהמלצות ב־0.0.1.
 
-לפני כתיבת קוד שמפרסם או מוריד מ־feed אמיתי, יש לקבע את כתובת מאגר Model Catalog, את כתובת
-מאגר NInferEZ Manager שממנו יגיעו App Releases ואת מדיניות החבילה הראשונה: bundled engine או
-הורדה ראשונית. אין לקודד URL מומצא. יתר המבנה אינו תלוי בהחלטות אלה.
+Portable ו־Installer נקיים אינם משכפלים מנוע. בהפעלה ראשונה ללא מנוע המשתמש חייב לבחור
+חבילה מתאימה, כאשר ברירת המחדל מומלצת לפי החומרה. Test Portable רשאי לכלול מנוע לצורך QA בלבד.
+
+## 19. מצב המימוש בפועל
+
+### 19.1 הושלם
+
+- המאגר הציבורי `BenGamliel/NInferEZ-Manager` נוצר, והוגדרו README, רישוי, אבטחה,
+  תרומה, ארכיטקטורה ו־GitHub Actions.
+- גרסת המוצר אוחדה ל־`0.0.1`; איטרציות מקומיות משתמשות ב־`buildId` נפרד.
+- lifecycle טעינת המנוע הוסב לפעולה אסינכרונית משותפת עם status, phase, elapsed,
+  ביטול מפורש ו־hard limit של 15 דקות. ביטול בקשת UI אינו הורג עוד את התהליך המשותף.
+- מיפוי RTX 30/40/50 Series ל־`sm86`/`sm89`/`sm120a` הוטמע, כולל בדיקה מפורשת ל־RTX 5080.
+- ספריית המנועים הוטמעה בדף Engine: refresh, המלצה, הורדה מאומתת, התקנה לצד גרסה קיימת,
+  activation, progress וביטול. מנוע bundled תקין מזוהה כמנוע פעיל לצורכי Test Portable.
+- Model Catalog מוצרי הוטמע עם שני המודלים, snapshot offline, רענון מרחוק, פרופילים,
+  הורדה, hash, progress, pause וקישורי Hugging Face.
+- Settings עבר ל־autosave; הפעולות המקומיות `Save profile` ו־`Apply API changes` נשארו מפורשות.
+- first-run setup מחייב בחירת מנוע כאשר אין מנוע מותקן, ממליץ לפי GPU ומאפשר בחירה ידנית.
+- UpdateService חובר למאגר הרשמי; מנגנוני Portable ו־Installed שומרים Models/Data/Engines
+  ומאמתים staging לפני החלפה.
+- Installer, Portable נקי ו־Test Portable נבנו ב־`dev-002`; בדיקות פרטיות החבילות עברו.
+- בדיקות backend, build, feed מקוון ו־packaging עברו ללא הפעלת inference על GPU.
+- לוגו `2beng2` נוסף כחתימת `BY` משנית בדף Engine ובתיעוד בלבד; הוא אינו לוגו המוצר.
+
+### 19.2 נותר לפני RC
+
+- לקבל תוצאת CI ירוקה עבור תיקון גרף הבנייה ולתקן אם נדרש.
+- לבנות `dev-003` מהקוד העדכני ולבצע smoke test ל־backend ולחבילות שנוצרו.
+- לבצע בדיקת ממשק ידנית ל־Portable, כולל first run, Engine, Models, autosave, single instance
+  וכל מצבי ההתקדמות והשגיאה שאפשר לבדוק ללא עומס GPU.
+- להכין תצוגת ניסיון יחידה לחתימת `BY 2beng2` בתחתית התפריט הפתוח. אין להחיל אותה על
+  יתר החבילות לפני אישור חזותי מפורש של המשתמש.
+- לבצע בדיקות inference ו־VRAM על RTX 5090 רק לאחר אישור מפורש; RTX 5080/3090/4090 נשארים
+  Community Preview עד בדיקה על חומרה אמיתית.
+- לאמת תהליך update מקצה לקצה מול Release ניסיוני לפני `final`.
+- ליצור `rc-*`, לקבל אישור משתמש, ורק אז לקדם את אותם artifacts ל־`final`/GitHub Release.
+
+### 19.3 מגבלות מכוונות ב־0.0.1
+
+- אין forced update ואין התקנה אוטומטית ללא אישור משתמש.
+- אין הבטחת Stable לכרטיס שלא עבר inference על חומרה אמיתית.
+- אין חתימה דיגיטלית מלאה ל־manifests עדיין; HTTPS, מקור רשמי, גודל ו־SHA-256 נאכפים.
+- חתימת ה־sidebar של `2beng2` היא שינוי UX שממתין לאישור ואינה חלק מה־build המאושר הנוכחי.
 
