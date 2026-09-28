@@ -1,0 +1,7 @@
+NInferEZ Manager data directory
+===============================
+
+The application creates settings, logs, catalog metadata, diagnostics and
+update downloads here at runtime. A clean release contains only this file.
+
+Do not put model weights in this folder. Use Models instead.

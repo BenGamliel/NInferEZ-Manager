@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Validate tag
+        shell: pwsh
+        run: if ('${{ github.ref_name }}' -ne 'v0.0.1') { throw 'This release line only publishes v0.0.1.' }
+      - name: Restore and test
+        run: |
+          dotnet restore NInferEZ.Manager.slnx --configfile NuGet.Config
+          dotnet run --project tests\NInferManager.Backend.Tests\NInferManager.Backend.Tests.csproj -c Release --no-restore
+      - name: Build packages
+        shell: pwsh
+        run: .\scripts\build.ps1 -BuildId final
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/0.0.1/final/packages/NInferEZ-Manager-Portable-0.0.1.zip
+            artifacts/0.0.1/final/packages/Installer/NInferEZ-Manager-Setup-0.0.1.exe
+            artifacts/0.0.1/final/packages/SHA256SUMS.txt

@@ -1,0 +1,34 @@
+# Build output
+bin/
+obj/
+build/
+dist/
+artifacts/
+cache/
+
+# Local runtime data and large payloads
+Data/
+Models/
+Engine/
+runtime/
+*.ninfer
+*.part
+*.partial
+
+# IDE and user state
+.vs/
+.idea/
+*.user
+*.suo
+*.pdb
+
+# Local logs and secrets
+*.log
+*.dmp
+settings.json
+diagnostics-*.zip
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

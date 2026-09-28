@@ -1,0 +1,8 @@
+NInferEZ Manager model directory
+================================
+
+Place supported .ninfer model artifacts in this folder. The application scans
+the folder and lists matching models automatically. You may also link an
+artifact stored elsewhere; linked artifacts are not copied.
+
+Model weights are not included with NInferEZ Manager.

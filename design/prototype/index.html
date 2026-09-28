@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NInferEZ Manager — UX Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="brand-copy"><strong>NInferEZ</strong><small>MANAGER</small></div>
+      </div>
+
+      <nav class="nav-list">
+        <button class="nav-item active" data-page="overview" aria-current="page">
+          <span class="nav-icon">⌂</span><span>Overview</span>
+        </button>
+        <button class="nav-item" data-page="models">
+          <span class="nav-icon">◇</span><span>Models</span><b>2</b>
+        </button>
+        <button class="nav-item" data-page="requests">
+          <span class="nav-icon">↗</span><span>Requests</span><i class="live-dot"></i>
+        </button>
+        <button class="nav-item" data-page="logs">
+          <span class="nav-icon">≡</span><span>Logs</span>
+        </button>
+        <button class="nav-item" data-page="engine">
+          <span class="nav-icon">⬡</span><span>Engine</span>
+        </button>
+        <button class="nav-item" data-page="settings">
+          <span class="nav-icon">⚙</span><span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="gpu-mini">
+          <div><span class="status-dot good"></span><strong>RTX 5090</strong></div>
+          <div class="meter"><span style="width:78%"></span></div>
+          <small>25.0 / 31.8 GB VRAM</small>
+        </div>
+        <button class="profile-button" aria-label="Open application menu">
+          <span>NE</span><span class="profile-label">Local workspace<small>v0.1 design build</small></span><b>•••</b>
+        </button>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <button class="mobile-menu" aria-label="Open navigation">☰</button>
+        <div class="breadcrumbs"><span>NInferEZ Manager</span><b>/</b><strong id="page-label">Overview</strong></div>
+        <div class="top-actions">
+          <div class="api-pill"><span class="status-dot good"></span><span>API ready</span><code>:8173</code></div>
+          <button class="icon-button" title="Notifications">●</button>
+          <button class="primary-button compact" data-action="copy"><span>⌁</span> Copy endpoint</button>
+        </div>
+      </header>
+
+      <section class="page active" id="page-overview">
+        <div class="page-heading">
+          <div><p class="eyebrow">LOCAL INFERENCE</p><h1>Everything is ready.</h1><p>The API is listening. Your model will load automatically on the next request.</p></div>
+          <div class="heading-actions"><button class="secondary-button">Open playground</button><button class="primary-button" data-action="load">Load now</button></div>
+        </div>
+
+        <div class="status-banner">
+          <div class="status-symbol"><span></span></div>
+          <div><strong>API online · model standing by</strong><p>Cold load is expected to take about 12 seconds. No GPU memory is reserved while idle.</p></div>
+          <button>View API</button>
+        </div>
+
+        <div class="overview-grid">
+          <article class="panel model-panel">
+            <div class="panel-label"><span>ACTIVE MODEL</span><button data-page-link="models">Manage</button></div>
+            <div class="model-title"><div class="model-glyph">Q</div><div><h2>Qwen 3.8 27B OrcaRouter</h2><p>IQ3_XXS · NInfer v3 · Text</p></div><span class="tag ready">READY</span></div>
+            <dl class="model-facts">
+              <div><dt>API name</dt><dd>Qwen3.8-27B-IQ3_XXS-Uncensored</dd></div>
+              <div><dt>Profile</dt><dd>Balanced 256K</dd></div>
+              <div><dt>Model size</dt><dd>10.06 GiB</dd></div>
+              <div><dt>Unload policy</dt><dd>After 3 min idle</dd></div>
+            </dl>
+            <div class="panel-actions"><button class="danger-quiet">Unload</button><button class="secondary-button">Edit profile</button></div>
+          </article>
+
+          <article class="panel gpu-panel">
+            <div class="panel-label"><span>GPU & MEMORY</span><span class="fresh">LIVE · 1s</span></div>
+            <div class="gauge-row"><div class="ring"><div><strong>78%</strong><small>VRAM</small></div></div><div class="gpu-copy"><h2>GeForce RTX 5090</h2><p>25.0 GB used of 31.8 GB</p><div class="legend"><span><i class="teal"></i>Model 10.1 GB</span><span><i class="blue"></i>KV 13.6 GB</span><span><i class="gray"></i>Other 1.3 GB</span></div></div></div>
+            <div class="gpu-stats"><div><small>UTILIZATION</small><strong>12%</strong></div><div><small>TEMPERATURE</small><strong>48°C</strong></div><div><small>HEADROOM</small><strong>6.8 GB</strong></div></div>
+          </article>
+
+          <article class="panel context-panel">
+            <div class="panel-label"><span>CONTEXT</span><button>Edit</button></div>
+            <div class="context-value"><strong>256K</strong><span>RK8V4</span></div>
+            <div class="wide-meter"><span style="width:61%"></span></div>
+            <div class="range-labels"><span>0</span><span>157,420 cached</span><span>262,144</span></div>
+            <p class="hint">104,724 tokens remain before the oldest context is evicted.</p>
+          </article>
+
+          <article class="panel metric-panel">
+            <div class="panel-label"><span>LAST 15 MINUTES</span><button data-page-link="requests">All requests</button></div>
+            <div class="metric-grid"><div><small>REQUESTS</small><strong>12</strong><em>0 failed</em></div><div><small>DECODE</small><strong>184.7</strong><em>tok/s avg</em></div><div><small>TTFT</small><strong>412</strong><em>ms avg</em></div></div>
+            <div class="sparkline" aria-label="Recent decode speed graph"><i style="height:38%"></i><i style="height:54%"></i><i style="height:46%"></i><i style="height:68%"></i><i style="height:59%"></i><i style="height:82%"></i><i style="height:74%"></i><i style="height:88%"></i><i style="height:67%"></i><i style="height:93%"></i><i style="height:79%"></i><i style="height:86%"></i></div>
+          </article>
+        </div>
+
+        <article class="panel activity-panel">
+          <div class="panel-label"><span>RECENT ACTIVITY</span><button data-page-link="logs">Open live logs</button></div>
+          <div class="activity-row"><span class="activity-icon success">✓</span><div><strong>Chat completion finished</strong><small>Qwen3.8-27B · 1,248 → 512 tokens</small></div><code>188.4 tok/s</code><time>12 sec ago</time></div>
+          <div class="activity-row"><span class="activity-icon info">↯</span><div><strong>Prefix cache reused</strong><small>78,240 tokens · 93% cache hit</small></div><code>2.1s saved</code><time>1 min ago</time></div>
+          <div class="activity-row"><span class="activity-icon neutral">◇</span><div><strong>Model loaded</strong><small>Balanced 256K profile · RK8V4 · MTP 3</small></div><code>11.8 sec</code><time>4 min ago</time></div>
+        </article>
+      </section>
+
+      <section class="page" id="page-models">
+        <div class="page-heading"><div><p class="eyebrow">MODEL LIBRARY</p><h1>Models</h1><p>Local models and links are discovered without loading them into GPU memory.</p></div><div class="heading-actions"><button class="secondary-button">Link external file</button><button class="primary-button">Open Models folder</button></div></div>
+        <div class="toolbar"><div class="search"><span>⌕</span><input type="search" placeholder="Search models"></div><button class="filter active">All <b>2</b></button><button class="filter">Ready <b>2</b></button><button class="filter">Needs attention</button><button class="filter icon">☷</button></div>
+        <div class="split-layout">
+          <div class="model-list">
+            <article class="model-row selected"><div class="model-glyph">Q</div><div class="row-main"><div><h3>Qwen 3.8 27B OrcaRouter</h3><span class="tag ready">ACTIVE</span></div><p>IQ3_XXS · 10.06 GiB · Local</p><small>API: Qwen3.8-27B-IQ3_XXS-Uncensored</small></div><div class="row-tail"><strong>256K</strong><small>context</small><button>•••</button></div></article>
+            <article class="model-row"><div class="model-glyph violet">S</div><div class="row-main"><div><h3>Swift 1.5 Qwen 3.8 27B</h3><span class="tag">READY</span></div><p>NVFP4 · 19.8 GiB · Local</p><small>API: original filename</small></div><div class="row-tail"><strong>256K</strong><small>context</small><button>•••</button></div></article>
+            <button class="drop-zone"><span>＋</span><strong>Add another model</strong><small>Place a .ninfer file in Models or link one from another drive</small></button>
+          </div>
+          <aside class="detail-panel"><div class="detail-head"><div class="model-glyph large">Q</div><div><span class="tag ready">ACTIVE</span><h2>Qwen 3.8 27B OrcaRouter</h2><p>OrcaRouter GSQ-RCO IQ3_XXS</p></div><button>×</button></div><div class="detail-section"><h3>Identity</h3><label>API model name<div class="field-row"><input value="Qwen3.8-27B-IQ3_XXS-Uncensored"><button>Save</button></div></label><small>Clients use this exact value in the <code>model</code> field.</small></div><div class="detail-section"><h3>Active profile</h3><button class="profile-card"><span><strong>Balanced 256K</strong><small>RK8V4 · MTP 3 · 4K prefill</small></span><b>›</b></button></div><div class="detail-section facts"><div><span>Format</span><strong>NInfer v3</strong></div><div><span>File size</span><strong>10.06 GiB</strong></div><div><span>Validation</span><strong class="positive">Passed</strong></div><div><span>Location</span><strong class="path">Models\orca-router-iq3-xxs.ninfer</strong></div></div><div class="detail-actions"><button class="secondary-button">Unload</button><button class="primary-button">Edit profile</button></div></aside>
+        </div>
+      </section>
+
+      <section class="page" id="page-requests">
+        <div class="page-heading"><div><p class="eyebrow">OBSERVABILITY</p><h1>Requests</h1><p>Performance metadata is retained locally. Prompt and response content is not recorded.</p></div><div class="heading-actions"><button class="secondary-button">Clear history</button><button class="primary-button">Export CSV</button></div></div>
+        <div class="summary-strip"><div><small>ACTIVE</small><strong><i class="live-dot"></i>1</strong></div><div><small>COMPLETED</small><strong>482</strong></div><div><small>FAILED</small><strong>3</strong></div><div><small>AVG DECODE</small><strong>181.3 <em>tok/s</em></strong></div><div><small>AVG TTFT</small><strong>438 <em>ms</em></strong></div></div>
+        <article class="table-panel"><div class="table-toolbar"><div class="search"><span>⌕</span><input placeholder="Filter requests"></div><select><option>All statuses</option></select><select><option>Last hour</option></select><span class="live-label"><i class="live-dot"></i>Live</span></div><div class="data-table"><div class="table-row header"><span>ID</span><span>STARTED</span><span>TYPE</span><span>STATUS</span><span>TOKENS</span><span>TTFT</span><span>DECODE</span><span>DURATION</span></div><div class="table-row live"><span>#0486</span><span>Now</span><span>Chat stream</span><span><i class="live-dot"></i>Running</span><span>48,120 → 183</span><span>684 ms</span><span>176.2 t/s</span><span>8.2 s</span></div><div class="table-row"><span>#0485</span><span>14:32:18</span><span>Chat stream</span><span class="positive">Completed</span><span>1,248 → 512</span><span>392 ms</span><span>188.4 t/s</span><span>3.3 s</span></div><div class="table-row"><span>#0484</span><span>14:31:04</span><span>Completion</span><span class="positive">Completed</span><span>78,240 → 84</span><span>2.12 s</span><span>192.8 t/s</span><span>2.7 s</span></div><div class="table-row"><span>#0483</span><span>14:28:47</span><span>Chat</span><span class="negative">Failed</span><span>—</span><span>—</span><span>—</span><span>0.1 s</span></div></div></article>
+      </section>
+
+      <section class="page" id="page-logs">
+        <div class="page-heading"><div><p class="eyebrow">DIAGNOSTICS</p><h1>Live logs</h1><p>Manager, API and engine events in one searchable timeline.</p></div><div class="heading-actions"><button class="secondary-button">Open log folder</button><button class="primary-button">Export diagnostics</button></div></div>
+        <article class="logs-panel"><div class="log-toolbar"><div class="segmented"><button class="active">All</button><button>Manager</button><button>API</button><button>Engine</button></div><div class="search dark"><span>⌕</span><input placeholder="Search logs"></div><select><option>Info and above</option></select><button class="icon-button" title="Pause autoscroll">Ⅱ</button></div><div class="log-stream" role="log"><div><time>14:32:31.084</time><b class="log-info">INFO</b><em>API</em><span>request #0486 stream started · model=Qwen3.8-27B-IQ3_XXS-Uncensored</span></div><div><time>14:32:31.768</time><b class="log-debug">DEBUG</b><em>ENGINE</em><span>prefix cache lookup · matched=47,616 / 48,120 tokens</span></div><div><time>14:32:31.769</time><b class="log-info">INFO</b><em>ENGINE</em><span>prefill complete · 684 ms · speculative=mtp · drafts=3</span></div><div><time>14:32:36.213</time><b class="log-info">INFO</b><em>API</em><span>request #0486 · generated=183 · decode=176.2 tok/s</span></div><div><time>14:32:39.304</time><b class="log-warn">WARN</b><em>MANAGER</em><span>VRAM headroom below profile target · available=6.8 GiB · target=7.0 GiB</span></div><div><time>14:32:40.011</time><b class="log-debug">DEBUG</b><em>MANAGER</em><span>telemetry sample · gpu=12% · memory=25,603 MiB · temperature=48°C</span></div></div><div class="log-status"><span>6 visible · 3,824 retained</span><span><i class="live-dot"></i>Following live output</span></div></article>
+      </section>
+
+      <section class="page" id="page-engine">
+        <div class="page-heading"><div><p class="eyebrow">RUNTIME</p><h1>Engine</h1><p>Installed NInfer runtime, hardware compatibility and lifecycle.</p></div><div class="heading-actions"><button class="secondary-button">Check for updates</button><button class="primary-button">Restart engine</button></div></div>
+        <div class="engine-hero panel"><div class="engine-mark">N</div><div><span class="tag ready">CURRENT</span><h2>NInferEZ Engine for RTX 5090</h2><p>SM120a · CUDA 13.1 · NInfer All compatible</p></div><div class="engine-version"><small>INSTALLED VERSION</small><strong>0.1.0</strong><span>Up to date</span></div></div>
+        <div class="two-column"><article class="panel settings-list"><div class="panel-label"><span>INSTALLATION</span></div><div><span>Engine state</span><strong class="positive">Ready</strong></div><div><span>Executable</span><strong>ninfer.exe</strong></div><div><span>Architecture</span><strong>sm_120a</strong></div><div><span>CUDA runtime</span><strong>13.1</strong></div><div><span>Source</span><strong>NInferEZ-Engine release</strong></div><button class="secondary-button wide">Open engine folder</button></article><article class="panel"><div class="panel-label"><span>CAPABILITIES</span></div><div class="cap-grid"><span>✓ NInfer v3</span><span>✓ DFlash2</span><span>✓ MTP</span><span>✓ NVFP4</span><span>✓ Vision</span><span>✓ 512K context</span></div><div class="notice"><strong>Hardware specific</strong><p>This build is optimized for RTX 5090. Future architectures appear here as separate verified engine packages.</p></div></article></div>
+      </section>
+
+      <section class="page" id="page-settings">
+        <div class="page-heading"><div><p class="eyebrow">PREFERENCES</p><h1>Settings</h1><p>Global behavior only. Model performance settings are stored with each profile.</p></div><div class="heading-actions"><button class="primary-button">Save changes</button></div></div>
+        <div class="settings-layout"><nav class="settings-nav"><button class="active">General</button><button>API & access</button><button>Lifecycle</button><button>Appearance</button><button>Updates</button><button>Privacy</button></nav><div class="settings-content"><article class="panel form-card"><div><h3>Startup</h3><p>Choose how Manager behaves when Windows starts.</p></div><label class="switch-row"><span><strong>Start with Windows</strong><small>Launch Manager in the tray after sign-in.</small></span><input type="checkbox"><i></i></label><label class="switch-row"><span><strong>Start minimized</strong><small>Keep the main window hidden until opened.</small></span><input type="checkbox"><i></i></label></article><article class="panel form-card"><div><h3>Default API</h3><p>The local API starts with Manager and loads the selected model on demand.</p></div><label class="field-label">Port<input type="number" value="8173"></label><label class="switch-row"><span><strong>Lock this port</strong><small>Show an error instead of selecting another port.</small></span><input type="checkbox"><i></i></label><div class="inline-notice"><span>✓</span><p><strong>Available on this computer</strong><br><code>http://127.0.0.1:8173/v1</code></p></div></article><article class="panel form-card"><div><h3>Model memory</h3><p>Release VRAM after the API becomes idle.</p></div><div class="choice-grid"><label><input type="radio" name="unload"><span><strong>Keep loaded</strong><small>Fastest next request</small></span></label><label class="selected"><input type="radio" name="unload" checked><span><strong>After idle</strong><small>Recommended</small></span></label><label><input type="radio" name="unload"><span><strong>Immediately</strong><small>Minimum VRAM use</small></span></label></div><label class="field-label">Idle time before unload<div class="unit-field"><input type="number" value="3"><span>minutes</span></div></label></article></div></div>
+      </section>
+    </main>
+
+    <div class="toast" role="status"><span>✓</span><div><strong>Endpoint copied</strong><small>http://127.0.0.1:8173/v1</small></div></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
+      - name: Restore
+        run: dotnet restore NInferEZ.Manager.slnx --configfile NuGet.Config
+      - name: Build
+        run: dotnet build NInferEZ.Manager.slnx -c Release --no-restore
+      - name: Host-only tests
+        run: dotnet run --project tests\NInferManager.Backend.Tests\NInferManager.Backend.Tests.csproj -c Release --no-restore
+      - name: Validate feeds
+        shell: pwsh
+        run: |
+          $catalog = Get-Content feeds\model-catalog.json -Raw | ConvertFrom-Json
+          if ($catalog.schemaVersion -ne 1 -or $catalog.product -ne 'NInferEZ Model Catalog') { throw 'Invalid model feed.' }
+          if (@($catalog.models).Count -lt 1) { throw 'The model feed is empty.' }

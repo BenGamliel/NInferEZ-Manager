@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/NInferManager.Contracts/NInferManager.Contracts.csproj" />
+  <Project Path="src/NInferManager.Backend/NInferManager.Backend.csproj" />
+  <Project Path="src/NInferManager.WinUI/NInferManager.WinUI.csproj" />
+  <Project Path="tests/NInferManager.Backend.Tests/NInferManager.Backend.Tests.csproj" />
+</Solution>
+

@@ -1,0 +1,149 @@
+<Application
+    x:Class="NInferManager.WinUI.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="PageColor">#FFF4F7F6</Color>
+                    <Color x:Key="NavigationColor">#FFF8FAF9</Color>
+                    <Color x:Key="SurfaceColor">#FFFFFFFF</Color>
+                    <Color x:Key="SurfaceAltColor">#FFF0F5F3</Color>
+                    <Color x:Key="ElevatedColor">#FFFFFFFF</Color>
+                    <Color x:Key="BorderColor">#FFDCE5E1</Color>
+                    <Color x:Key="BorderSoftColor">#FFE8EEEB</Color>
+                    <Color x:Key="TextColor">#FF101715</Color>
+                    <Color x:Key="MutedColor">#FF667570</Color>
+                    <Color x:Key="SubtleColor">#FF8A9994</Color>
+                    <Color x:Key="AccentColor">#FF159A7D</Color>
+                    <Color x:Key="AccentBrightColor">#FF20B994</Color>
+                    <Color x:Key="AccentSoftColor">#FFE1F4EE</Color>
+                    <Color x:Key="SuccessColor">#FF11896E</Color>
+                    <Color x:Key="WarningColor">#FFC68A22</Color>
+                    <Color x:Key="DangerColor">#FFD84E57</Color>
+                    <Color x:Key="LogColor">#FF0B100F</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <Color x:Key="PageColor">#FF0B0F12</Color>
+                    <Color x:Key="NavigationColor">#FF0E1317</Color>
+                    <Color x:Key="SurfaceColor">#FF12191E</Color>
+                    <Color x:Key="SurfaceAltColor">#FF172027</Color>
+                    <Color x:Key="ElevatedColor">#FF1C272F</Color>
+                    <Color x:Key="BorderColor">#FF26333B</Color>
+                    <Color x:Key="BorderSoftColor">#FF1D282F</Color>
+                    <Color x:Key="TextColor">#FFF2F5F3</Color>
+                    <Color x:Key="MutedColor">#FF92A0A6</Color>
+                    <Color x:Key="SubtleColor">#FF64737A</Color>
+                    <Color x:Key="AccentColor">#FF5CE0C0</Color>
+                    <Color x:Key="AccentBrightColor">#FF70EBCD</Color>
+                    <Color x:Key="AccentSoftColor">#FF17312D</Color>
+                    <Color x:Key="SuccessColor">#FF5CE0C0</Color>
+                    <Color x:Key="WarningColor">#FFF5C66B</Color>
+                    <Color x:Key="DangerColor">#FFFF7F83</Color>
+                    <Color x:Key="LogColor">#FF080C0F</Color>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <SolidColorBrush x:Key="PageBrush" Color="{ThemeResource PageColor}" />
+            <SolidColorBrush x:Key="NavigationBrush" Color="{ThemeResource NavigationColor}" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="{ThemeResource SurfaceColor}" />
+            <SolidColorBrush x:Key="SurfaceAltBrush" Color="{ThemeResource SurfaceAltColor}" />
+            <SolidColorBrush x:Key="ElevatedBrush" Color="{ThemeResource ElevatedColor}" />
+            <SolidColorBrush x:Key="BorderBrush" Color="{ThemeResource BorderColor}" />
+            <SolidColorBrush x:Key="BorderSoftBrush" Color="{ThemeResource BorderSoftColor}" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource TextColor}" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="{ThemeResource MutedColor}" />
+            <SolidColorBrush x:Key="SubtleTextBrush" Color="{ThemeResource SubtleColor}" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource AccentColor}" />
+            <SolidColorBrush x:Key="AccentBrightBrush" Color="{ThemeResource AccentBrightColor}" />
+            <SolidColorBrush x:Key="AccentSoftBrush" Color="{ThemeResource AccentSoftColor}" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="{ThemeResource SuccessColor}" />
+            <SolidColorBrush x:Key="WarningBrush" Color="{ThemeResource WarningColor}" />
+            <SolidColorBrush x:Key="DangerBrush" Color="{ThemeResource DangerColor}" />
+            <SolidColorBrush x:Key="LogBrush" Color="{ThemeResource LogColor}" />
+
+            <Style x:Key="PageTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="38" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="CharacterSpacing" Value="-25" />
+                <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+            </Style>
+            <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+            </Style>
+            <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+            </Style>
+            <Style x:Key="EyebrowStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="CharacterSpacing" Value="120" />
+                <Setter Property="Foreground" Value="{ThemeResource AccentBrush}" />
+            </Style>
+            <Style x:Key="MutedStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource MutedTextBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="CaptionStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource SubtleTextBrush}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="CardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource BorderSoftBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="16" />
+                <Setter Property="Padding" Value="20" />
+            </Style>
+            <Style x:Key="CompactCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Padding" Value="17" />
+                <Setter Property="CornerRadius" Value="14" />
+            </Style>
+            <Style x:Key="PillStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="7" />
+                <Setter Property="Padding" Value="8,4" />
+            </Style>
+            <Style x:Key="MetricValueStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="24" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+            </Style>
+            <Style x:Key="ManagerPrimaryButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="Foreground" Value="#FF071410" />
+                <Setter Property="BorderBrush" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="16,9" />
+            </Style>
+            <Style x:Key="SidebarNavButtonStyle" TargetType="Button">
+                <Setter Property="Height" Value="44" />
+                <Setter Property="Margin" Value="8,2" />
+                <Setter Property="Padding" Value="14,0" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
