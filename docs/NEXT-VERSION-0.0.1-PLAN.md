@@ -829,14 +829,14 @@ Portable ו־Installer נקיים אינם משכפלים מנוע. בהפעלה
 - first-run setup מחייב בחירת מנוע כאשר אין מנוע מותקן, ממליץ לפי GPU ומאפשר בחירה ידנית.
 - UpdateService חובר למאגר הרשמי; מנגנוני Portable ו־Installed שומרים Models/Data/Engines
   ומאמתים staging לפני החלפה.
-- Installer, Portable נקי ו־Test Portable נבנו ב־`dev-002`; בדיקות פרטיות החבילות עברו.
+- Installer, Portable נקי ו־Test Portable נבנו מחדש ב־`dev-003` מה־commit `4859fa3`;
+  בדיקות פרטיות החבילות, 61 hashes ו־smoke test מתוך החבילה עברו.
 - בדיקות backend, build, feed מקוון ו־packaging עברו ללא הפעלת inference על GPU.
+- GitHub Actions עבר בהצלחה ב־Windows: restore, build, host-only tests ו־feed validation.
 - לוגו `2beng2` נוסף כחתימת `BY` משנית בדף Engine ובתיעוד בלבד; הוא אינו לוגו המוצר.
 
 ### 19.2 נותר לפני RC
 
-- לקבל תוצאת CI ירוקה עבור תיקון גרף הבנייה ולתקן אם נדרש.
-- לבנות `dev-003` מהקוד העדכני ולבצע smoke test ל־backend ולחבילות שנוצרו.
 - לבצע בדיקת ממשק ידנית ל־Portable, כולל first run, Engine, Models, autosave, single instance
   וכל מצבי ההתקדמות והשגיאה שאפשר לבדוק ללא עומס GPU.
 - להכין תצוגת ניסיון יחידה לחתימת `BY 2beng2` בתחתית התפריט הפתוח. אין להחיל אותה על
