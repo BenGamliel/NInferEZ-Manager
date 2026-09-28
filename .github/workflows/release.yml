@@ -24,7 +24,8 @@ jobs:
       - name: Restore and test
         run: |
           dotnet restore NInferEZ.Manager.slnx --configfile NuGet.Config
-          dotnet run --project tests\NInferManager.Backend.Tests\NInferManager.Backend.Tests.csproj -c Release --no-restore
+          dotnet build NInferEZ.Manager.slnx -c Release --no-restore -m:1
+          dotnet run --project tests\NInferManager.Backend.Tests\NInferManager.Backend.Tests.csproj -c Release --no-build
       - name: Build packages
         shell: pwsh
         run: .\scripts\build.ps1 -BuildId final

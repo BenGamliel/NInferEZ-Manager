@@ -48,12 +48,13 @@ public sealed class EnginePackageService : IDisposable
         var gpu = await GpuMonitor.ReadAsync();
         var recommended = RecommendArchitecture(gpu?.Name);
         var pointer = ReadPointer();
+        var bundled = pointer is null ? ReadBundledManifest() : null;
         var packages = _channel.Packages
             .Where(IsSupportedPackage)
             .Select(p => new EnginePackageInfo(p.EngineVersion, p.CudaArchitecture, p.GpuFamily, p.GpuModels, p.Channel,
                 p.Qualification, p.NativeNvfp4, p.FileName, p.SizeBytes, p.Sha256, p.Url,
-                IsInstalled(p), pointer is not null && pointer.EngineVersion.Equals(p.EngineVersion, StringComparison.OrdinalIgnoreCase)
-                    && pointer.CudaArchitecture.Equals(p.CudaArchitecture, StringComparison.OrdinalIgnoreCase),
+                IsInstalled(p) || BundledMatches(bundled,p), (pointer is not null && pointer.EngineVersion.Equals(p.EngineVersion, StringComparison.OrdinalIgnoreCase)
+                    && pointer.CudaArchitecture.Equals(p.CudaArchitecture, StringComparison.OrdinalIgnoreCase)) || BundledMatches(bundled,p),
                 p.CudaArchitecture.Equals(recommended, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(p => p.Recommended).ThenBy(p => p.CudaArchitecture, StringComparer.OrdinalIgnoreCase).ToArray();
         return new(gpu?.Name, recommended, pointer?.CudaArchitecture ?? ReadBundledArchitecture(), pointer?.EngineVersion ?? ReadBundledVersion(), packages, _channel.UpdatedAt);
@@ -208,6 +209,9 @@ public sealed class EnginePackageService : IDisposable
     private static bool IsSupportedPackage(EnginePackage p) => p.Platform == "windows-x64" && p.ContractVersion is >= ProductInfo.MinimumEngineContract and <= ProductInfo.MaximumEngineContract;
     private EnginePackage Find(string version, string architecture) => _channel.Packages.FirstOrDefault(p => p.EngineVersion.Equals(version, StringComparison.OrdinalIgnoreCase) && p.CudaArchitecture.Equals(architecture, StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidOperationException("The selected engine package is not in the verified channel.");
     private bool IsInstalled(EnginePackage p) => File.Exists(Path.Combine(_paths.EnginesDirectory, RelativeRoot(p), "ninfer-serve.exe"));
+    private static bool BundledMatches(InstalledManifest? bundled, EnginePackage package) => bundled is not null
+        && bundled.EngineVersion.Equals(package.EngineVersion,StringComparison.OrdinalIgnoreCase)
+        && bundled.CudaArchitecture.Equals(package.CudaArchitecture,StringComparison.OrdinalIgnoreCase);
     private static string RelativeRoot(EnginePackage p) => Path.Combine(p.EngineVersion, p.CudaArchitecture);
     private CurrentEnginePointer? ReadPointer() { try { return File.Exists(_paths.CurrentEngineFile) ? JsonSerializer.Deserialize<CurrentEnginePointer>(File.ReadAllText(_paths.CurrentEngineFile), JsonOptions()) : null; } catch { return null; } }
     private void WritePointer(CurrentEnginePointer pointer) { var temp = _paths.CurrentEngineFile + ".tmp"; File.WriteAllText(temp, JsonSerializer.Serialize(pointer, JsonOptions())); File.Move(temp, _paths.CurrentEngineFile, true); }
