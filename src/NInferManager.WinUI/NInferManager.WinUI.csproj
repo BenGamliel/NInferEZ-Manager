@@ -26,7 +26,7 @@
     <ProjectReference Include="..\NInferManager.Contracts\NInferManager.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\..\assets\NInferEZ.ico" Link="Assets\NInferEZ.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\..\assets\2beng2.png" Link="Assets\2beng2.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\NInferEZ.ico" Link="Assets\NInferEZ.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\assets\2beng2.png" Link="Assets\2beng2.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

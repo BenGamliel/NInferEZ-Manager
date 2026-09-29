@@ -7,9 +7,11 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using NInferManager.Contracts;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
+using Windows.Storage;
 
 namespace NInferManager.WinUI;
 
@@ -18,6 +20,9 @@ public sealed partial class MainWindow : Window
     private readonly BackendClient _backend=new();
     private readonly DispatcherTimer _timer=new(){Interval=TimeSpan.FromSeconds(2)};
     private readonly DispatcherTimer _settingsSaveTimer=new(){Interval=TimeSpan.FromMilliseconds(700)};
+    private readonly Dictionary<InfoBar,CancellationTokenSource> _infoBarDismissals=[];
+    private readonly HashSet<InfoBar> _hoveredInfoBars=[];
+    private readonly HashSet<InfoBar> _expiredInfoBars=[];
     private TrayIconController? _tray;
     private readonly IntPtr _windowHandle;
     private ManagerSettings? _settings;
@@ -48,14 +53,16 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        RegisterTransientInfoBars();
         Title="NInferEZ Manager";
         AboutVersionText.Text=$"{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)??"unknown"}";
+        _=LoadPublisherBrandingAsync();
         _windowHandle=WinRT.Interop.WindowNative.GetWindowHandle(this);
         var iconPath=Path.Combine(AppContext.BaseDirectory,"Assets","NInferEZ.ico");
         if(File.Exists(iconPath))AppWindow.SetIcon(iconPath);
         AppWindow.Resize(new SizeInt32(1420,900));
         AppWindow.Closing+=OnWindowClosing;
-        Closed+=(_,_)=>{_timer.Stop();_settingsSaveTimer.Stop();_tray?.Dispose();_backend.Dispose();};
+        Closed+=(_,_)=>{_timer.Stop();_settingsSaveTimer.Stop();foreach(var dismissal in _infoBarDismissals.Values){dismissal.Cancel();dismissal.Dispose();}_infoBarDismissals.Clear();_tray?.Dispose();_backend.Dispose();};
         _timer.Tick+=async (_,_)=>
         {
             await RefreshStatusAsync();
@@ -69,6 +76,69 @@ public sealed partial class MainWindow : Window
         Activated+=MainWindow_Activated;
         SetSidebarExpanded(true);
         NavigateToPage("dashboard");
+    }
+    private void RegisterTransientInfoBars()
+    {
+        foreach(var infoBar in new[]{GlobalInfo,ModelsInfo,EngineLibraryInfo,SettingsInfo})
+        {
+            infoBar.RegisterPropertyChangedCallback(InfoBar.IsOpenProperty,(_,_)=>
+            {
+                if(infoBar.IsOpen)ScheduleInfoBarDismissal(infoBar);
+                else CancelInfoBarDismissal(infoBar);
+            });
+            infoBar.PointerEntered+=(_,_)=>_hoveredInfoBars.Add(infoBar);
+            infoBar.PointerExited+=(_,_)=>
+            {
+                _hoveredInfoBars.Remove(infoBar);
+                if(_expiredInfoBars.Contains(infoBar)&&infoBar.IsOpen)infoBar.IsOpen=false;
+            };
+        }
+    }
+    private void ScheduleInfoBarDismissal(InfoBar infoBar)
+    {
+        CancelInfoBarDismissal(infoBar);
+        var cancellation=new CancellationTokenSource();
+        _infoBarDismissals[infoBar]=cancellation;
+        _=DismissInfoBarAfterDelayAsync(infoBar,cancellation);
+    }
+    private async Task DismissInfoBarAfterDelayAsync(InfoBar infoBar,CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(10),cancellation.Token);
+            if(cancellation.IsCancellationRequested)return;
+            _expiredInfoBars.Add(infoBar);
+            if(!_hoveredInfoBars.Contains(infoBar)&&infoBar.IsOpen)infoBar.IsOpen=false;
+        }
+        catch(OperationCanceledException){}
+    }
+    private void CancelInfoBarDismissal(InfoBar infoBar)
+    {
+        if(_infoBarDismissals.Remove(infoBar,out var cancellation))
+        {
+            cancellation.Cancel();
+            cancellation.Dispose();
+        }
+        _expiredInfoBars.Remove(infoBar);
+        if(!infoBar.IsOpen)_hoveredInfoBars.Remove(infoBar);
+    }
+    private async Task LoadPublisherBrandingAsync()
+    {
+        try
+        {
+            var executableDirectory=Path.GetDirectoryName(Environment.ProcessPath)??AppContext.BaseDirectory;
+            var file=await StorageFile.GetFileFromPathAsync(Path.Combine(executableDirectory,"Assets","2beng2.png"));
+            using var stream=await file.OpenReadAsync();
+            var image=new BitmapImage{DecodePixelWidth=160};
+            await image.SetSourceAsync(stream);
+            SidebarPublisherLogo.Source=image;
+            EnginePublisherLogo.Source=image;
+        }
+        catch
+        {
+            ToolTipService.SetToolTip(SidebarPublisherSignature,"Created by 2beng2 · logo could not be loaded");
+            ToolTipService.SetToolTip(EnginePublisherSignature,"Created by 2beng2 · logo could not be loaded");
+        }
     }
     private void ApplyResponsiveLayout(double width)
     {
@@ -285,7 +355,7 @@ public sealed partial class MainWindow : Window
                 : $"{snapshot.DetectedGpu} · Recommended: {FriendlyArchitecture(snapshot.RecommendedArchitecture)}. Unlisted cards in the same architecture are Community Preview.";
             EngineCompatibilityText.Text=snapshot.ActiveArchitecture is null?"No active package":$"{FriendlyArchitecture(snapshot.ActiveArchitecture)} · NInfer All compatible · Windows x64";
         }
-        catch(Exception ex){EngineLibraryInfo.Title="Engine catalog unavailable";EngineLibraryInfo.Message=ex.Message;EngineLibraryInfo.Severity=InfoBarSeverity.Warning;EngineLibraryInfo.IsOpen=true;}
+        catch(Exception ex){ShowInfoBar(EngineLibraryInfo,"Engine catalog unavailable",ex.Message,InfoBarSeverity.Warning);}
     }
     private void EnginePackagePicker_SelectionChanged(object sender,SelectionChangedEventArgs e)
     {
@@ -297,8 +367,8 @@ public sealed partial class MainWindow : Window
     }
     private async void RefreshEngines_Click(object sender,RoutedEventArgs e)
     {
-        try{await _backend.RefreshEnginesAsync();await RefreshEngineLibraryAsync();EngineLibraryInfo.Title="Engine catalog refreshed";EngineLibraryInfo.Message="Verified packages were loaded from the official NInferEZ Engine channel.";EngineLibraryInfo.Severity=InfoBarSeverity.Success;EngineLibraryInfo.IsOpen=true;}
-        catch(Exception ex){EngineLibraryInfo.Title="Could not refresh";EngineLibraryInfo.Message=ex.Message;EngineLibraryInfo.Severity=InfoBarSeverity.Error;EngineLibraryInfo.IsOpen=true;}
+        try{await _backend.RefreshEnginesAsync();await RefreshEngineLibraryAsync();ShowInfoBar(EngineLibraryInfo,"Engine catalog refreshed","Verified packages were loaded from the official NInferEZ Engine channel.",InfoBarSeverity.Success);}
+        catch(Exception ex){ShowInfoBar(EngineLibraryInfo,"Could not refresh",ex.Message,InfoBarSeverity.Error);}
     }
     private async void EnginePackageAction_Click(object sender,RoutedEventArgs e)
     {
@@ -310,7 +380,7 @@ public sealed partial class MainWindow : Window
             else await _backend.InstallEngineAsync(package.EngineVersion,package.CudaArchitecture);
             await RefreshEngineLibraryAsync();await RefreshEnginePackageProgressAsync();
         }
-        catch(Exception ex){EngineLibraryInfo.Title="Engine change failed";EngineLibraryInfo.Message=ex.Message;EngineLibraryInfo.Severity=InfoBarSeverity.Error;EngineLibraryInfo.IsOpen=true;}
+        catch(Exception ex){ShowInfoBar(EngineLibraryInfo,"Engine change failed",ex.Message,InfoBarSeverity.Error);}
     }
     private async Task RefreshEnginePackageProgressAsync()
     {
@@ -324,19 +394,19 @@ public sealed partial class MainWindow : Window
             EngineInstallProgressText.Text=progress.Total>0?$"{progress.Stage} · {progress.Completed/1024d/1024d:0} / {progress.Total/1024d/1024d:0} MiB":progress.Stage;
             if(!progress.Running&&progress.Stage=="Ready"&&_lastEnginePackageStage!="Ready")await RefreshEngineLibraryAsync();
             if(!progress.Running&&progress.Stage=="Ready"&&_settings is not null&&!_settings.FirstRunCompleted){_settings.FirstRunCompleted=true;await _backend.SaveSettingsAsync(_settings);ShowGlobal("Engine ready","NInferEZ Engine is installed and ready to load a model.",InfoBarSeverity.Success);}
-            if(!progress.Running&&!string.IsNullOrWhiteSpace(progress.Error)){EngineLibraryInfo.Title="Engine installation failed";EngineLibraryInfo.Message=progress.Error;EngineLibraryInfo.Severity=InfoBarSeverity.Error;EngineLibraryInfo.IsOpen=true;}
+            if(!progress.Running&&!string.IsNullOrWhiteSpace(progress.Error))ShowInfoBar(EngineLibraryInfo,"Engine installation failed",progress.Error,InfoBarSeverity.Error);
             _lastEnginePackageStage=progress.Stage;
         }
         catch { }
     }
     private async void CancelEngineInstall_Click(object sender,RoutedEventArgs e){try{await _backend.CancelEngineInstallAsync();}catch(Exception ex){ShowGlobal("Could not cancel download",ex.Message,InfoBarSeverity.Error);}}
     private static string FriendlyArchitecture(string value)=>value.ToLowerInvariant() switch{"sm120a"=>"RTX 5000 Series (sm120a)","sm89"=>"RTX 4000 Series (sm89)","sm86"=>"RTX 3000 Series (sm86)",_=>value};
-    private async void RefreshModels_Click(object sender,RoutedEventArgs e){try{await _backend.RefreshCatalogAsync();await RefreshModelsAsync();ModelsInfo.Title="Library refreshed";ModelsInfo.Message="The Models folder and linked files were scanned without loading GPU memory.";ModelsInfo.Severity=InfoBarSeverity.Success;ModelsInfo.IsOpen=true;}catch(Exception ex){ShowModelsError(ex);}}
+    private async void RefreshModels_Click(object sender,RoutedEventArgs e){try{await _backend.RefreshCatalogAsync();await RefreshModelsAsync();ShowInfoBar(ModelsInfo,"Library refreshed","The Models folder and linked files were scanned without loading GPU memory.",InfoBarSeverity.Success);}catch(Exception ex){ShowModelsError(ex);}}
     private async void AddModel_Click(object sender,RoutedEventArgs e)
     {
         var picker=new Windows.Storage.Pickers.FileOpenPicker();picker.FileTypeFilter.Add(".ninfer");WinRT.Interop.InitializeWithWindow.Initialize(picker,_windowHandle);
         var file=await picker.PickSingleFileAsync();if(file is null)return;
-        try{await _backend.LinkModelAsync(file.Path);await RefreshModelsAsync();await RefreshStatusAsync();ModelsInfo.Title="Model linked";ModelsInfo.Message="The file stays in its current location and is now ready to select.";ModelsInfo.Severity=InfoBarSeverity.Success;ModelsInfo.IsOpen=true;}catch(Exception ex){ShowModelsError(ex);}
+        try{await _backend.LinkModelAsync(file.Path);await RefreshModelsAsync();await RefreshStatusAsync();ShowInfoBar(ModelsInfo,"Model linked","The file stays in its current location and is now ready to select.",InfoBarSeverity.Success);}catch(Exception ex){ShowModelsError(ex);}
     }
     private async void DownloadModel_Click(object sender,RoutedEventArgs e)
     {
@@ -364,7 +434,7 @@ public sealed partial class MainWindow : Window
         catch { }
     }
     private async void CancelModelDownload_Click(object sender,RoutedEventArgs e){try{await _backend.CancelDownloadAsync();}catch(Exception ex){ShowModelsError(ex);}}
-    private async void Verify_Click(object sender,RoutedEventArgs e){if(sender is FrameworkElement{Tag:string file})try{var result=await _backend.VerifyAsync(file);ModelsInfo.Title=result?.Success==true?"Verification passed":"Verification failed";ModelsInfo.Message=result?.Message??"Verification completed.";ModelsInfo.Severity=result?.Success==true?InfoBarSeverity.Success:InfoBarSeverity.Error;ModelsInfo.IsOpen=true;}catch(Exception ex){ShowModelsError(ex);}}
+    private async void Verify_Click(object sender,RoutedEventArgs e){if(sender is FrameworkElement{Tag:string file})try{var result=await _backend.VerifyAsync(file);ShowInfoBar(ModelsInfo,result?.Success==true?"Verification passed":"Verification failed",result?.Message??"Verification completed.",result?.Success==true?InfoBarSeverity.Success:InfoBarSeverity.Error);}catch(Exception ex){ShowModelsError(ex);}}
     private async void Activate_Click(object sender,RoutedEventArgs e){if(sender is Button{Tag:string file})try{await _backend.ActivateAsync(file);await RefreshModelsAsync();await RefreshStatusAsync();}catch(Exception ex){ShowModelsError(ex);}}
     private async void Delete_Click(object sender,RoutedEventArgs e)
     {
@@ -402,7 +472,7 @@ public sealed partial class MainWindow : Window
     private void LoadProfileControls(){if(_profileModel is null){ProfileEditor.Visibility=Visibility.Collapsed;NoInstalledProfile.Visibility=Visibility.Visible;return;}ProfileEditor.Visibility=Visibility.Visible;NoInstalledProfile.Visibility=Visibility.Collapsed;var p=_profileModel.RecommendedProfile;if(_settings?.Profiles.TryGetValue(_profileModel.FileName,out var saved)==true)p=saved;ModelApiNameBox.Text=_profileModel.ModelId;AutoContextBox.IsChecked=p.AutoContext;ContextBox.Value=p.MaxContext;PrefillBox.Value=p.PrefillChunk;KvBox.SelectedIndex=(int)p.KvPrecision;SpecBox.SelectedIndex=(int)p.SpeculativeMode;DraftBox.Value=p.DraftTokens;ConcurrencyBox.Value=1;VisionCapabilityPanel.Visibility=_profileModel.Vision?Visibility.Visible:Visibility.Collapsed;VisionBox.IsChecked=_profileModel.Vision&&p.VisionEnabled;CudaBox.IsChecked=p.CudaGraphEnabled;PrefixBox.IsChecked=p.PrefixReuseEnabled;}
     private async void SaveSettings_Click(object sender,RoutedEventArgs e)
     {
-        if(_settings is null)return;try{_settings.PublicPort=(int)PublicPortBox.Value;_settings.IdleMinutes=IdleMinutesBox.Value;_settings.LockPublicPort=LockPortBox.IsChecked==true;_settings.AutoUnloadEnabled=AutoUnloadBox.IsChecked==true;_settings.ApiKey=ApiKeyBox.Password;_settings.StartWithWindows=StartWithWindowsBox.IsChecked==true;_settings.StartMinimized=StartMinimizedBox.IsChecked==true;_settings.CloseToTray=CloseToTrayBox.IsChecked==true;_settings.AutoCheckUpdates=AutoUpdatesBox.IsChecked==true;_settings.AutoCheckCatalog=AutoCatalogBox.IsChecked==true;_settings.AutoCheckEngines=AutoEnginesBox.IsChecked==true;_settings.CorsEnabled=CorsBox.IsChecked==true;ApplyAdvancedValues(_settings,_advancedAppControls);SystemIntegration.SetStartupEnabled(_settings.StartWithWindows);if(_profileModel is not null){var p=_settings.Profiles.TryGetValue(_profileModel.FileName,out var current)?current:_profileModel.RecommendedProfile;p.AutoContext=AutoContextBox.IsChecked==true;p.MaxContext=(int)ContextBox.Value;p.PrefillChunk=(int)PrefillBox.Value;p.KvPrecision=(KvPrecision)KvBox.SelectedIndex;p.SpeculativeMode=(SpeculativeMode)SpecBox.SelectedIndex;p.DraftTokens=(int)DraftBox.Value;p.MaxConcurrency=1;p.VisionEnabled=_profileModel.Vision&&VisionBox.IsChecked==true;p.CudaGraphEnabled=CudaBox.IsChecked==true;p.PrefixReuseEnabled=PrefixBox.IsChecked==true;ApplyAdvancedValues(p,_advancedProfileControls);_settings.Profiles[_profileModel.FileName]=p;var alias=ModelApiNameBox.Text.Trim();if(string.IsNullOrEmpty(alias))_settings.ModelAliases.Remove(_profileModel.FileName);else _settings.ModelAliases[_profileModel.FileName]=alias;}await _backend.SaveSettingsAsync(_settings);await RefreshModelsAsync();SettingsInfo.Title="Settings saved";SettingsInfo.Message="The API name is active immediately. Engine profile changes apply on the next model load.";SettingsInfo.Severity=InfoBarSeverity.Success;SettingsInfo.IsOpen=true;}catch(Exception ex){SettingsInfo.Title="Could not save";SettingsInfo.Message=ex.Message;SettingsInfo.Severity=InfoBarSeverity.Error;SettingsInfo.IsOpen=true;}
+        if(_settings is null)return;try{_settings.PublicPort=(int)PublicPortBox.Value;_settings.IdleMinutes=IdleMinutesBox.Value;_settings.LockPublicPort=LockPortBox.IsChecked==true;_settings.AutoUnloadEnabled=AutoUnloadBox.IsChecked==true;_settings.ApiKey=ApiKeyBox.Password;_settings.StartWithWindows=StartWithWindowsBox.IsChecked==true;_settings.StartMinimized=StartMinimizedBox.IsChecked==true;_settings.CloseToTray=CloseToTrayBox.IsChecked==true;_settings.AutoCheckUpdates=AutoUpdatesBox.IsChecked==true;_settings.AutoCheckCatalog=AutoCatalogBox.IsChecked==true;_settings.AutoCheckEngines=AutoEnginesBox.IsChecked==true;_settings.CorsEnabled=CorsBox.IsChecked==true;ApplyAdvancedValues(_settings,_advancedAppControls);SystemIntegration.SetStartupEnabled(_settings.StartWithWindows);if(_profileModel is not null){var p=_settings.Profiles.TryGetValue(_profileModel.FileName,out var current)?current:_profileModel.RecommendedProfile;p.AutoContext=AutoContextBox.IsChecked==true;p.MaxContext=(int)ContextBox.Value;p.PrefillChunk=(int)PrefillBox.Value;p.KvPrecision=(KvPrecision)KvBox.SelectedIndex;p.SpeculativeMode=(SpeculativeMode)SpecBox.SelectedIndex;p.DraftTokens=(int)DraftBox.Value;p.MaxConcurrency=1;p.VisionEnabled=_profileModel.Vision&&VisionBox.IsChecked==true;p.CudaGraphEnabled=CudaBox.IsChecked==true;p.PrefixReuseEnabled=PrefixBox.IsChecked==true;ApplyAdvancedValues(p,_advancedProfileControls);_settings.Profiles[_profileModel.FileName]=p;var alias=ModelApiNameBox.Text.Trim();if(string.IsNullOrEmpty(alias))_settings.ModelAliases.Remove(_profileModel.FileName);else _settings.ModelAliases[_profileModel.FileName]=alias;}await _backend.SaveSettingsAsync(_settings);await RefreshModelsAsync();ShowInfoBar(SettingsInfo,"Settings saved","The API name is active immediately. Engine profile changes apply on the next model load.",InfoBarSeverity.Success);}catch(Exception ex){ShowInfoBar(SettingsInfo,"Could not save",ex.Message,InfoBarSeverity.Error);}
     }
     private async void RestoreProfile_Click(object sender,RoutedEventArgs e){if(_settings is null||_profileModel is null)return;try{_settings.Profiles[_profileModel.FileName]=_profileModel.RecommendedProfile;await _backend.SaveSettingsAsync(_settings);LoadProfileControls();BuildAdvancedSettings();ShowGlobal("Profile restored","Recommended settings will apply on the next model load.",InfoBarSeverity.Success);}catch(Exception ex){ShowGlobal("Profile could not be restored",ex.Message,InfoBarSeverity.Error);}}
     private async void RefreshLogs_Click(object sender,RoutedEventArgs e){try{await RefreshLogTextAsync();await RefreshRequestsAsync();}catch(Exception ex){ShowGlobal("Logs unavailable",ex.Message,InfoBarSeverity.Error);}}
@@ -486,7 +556,7 @@ public sealed partial class MainWindow : Window
             var dialog=new ContentDialog{Title=$"Install NInferEZ Manager {update.LatestVersion}?",Content="The package will be downloaded and verified with SHA-256 before installation.",PrimaryButtonText="Download and install",SecondaryButtonText="View release",CloseButtonText="Later",DefaultButton=ContentDialogButton.Primary,XamlRoot=Root.XamlRoot};
             var choice=await dialog.ShowAsync();if(choice==ContentDialogResult.Secondary&&update.ReleaseUrl is not null){Process.Start(new ProcessStartInfo(update.ReleaseUrl){UseShellExecute=true});return;}if(choice!=ContentDialogResult.Primary)return;
             await _backend.DownloadUpdateAsync(update);
-            while(true){await Task.Delay(500);var progress=await _backend.UpdateProgressAsync();if(progress is null)continue;GlobalInfo.IsOpen=true;GlobalInfo.Title="Updating NInferEZ Manager";GlobalInfo.Message=$"{progress.Stage} · {(progress.Total>0?progress.Completed*100d/progress.Total:0):0}%";GlobalInfo.Severity=progress.Error is null?InfoBarSeverity.Informational:InfoBarSeverity.Error;if(!progress.Running){if(progress.Error is not null)return;break;}}
+            while(true){await Task.Delay(500);var progress=await _backend.UpdateProgressAsync();if(progress is null)continue;ShowInfoBar(GlobalInfo,"Updating NInferEZ Manager",$"{progress.Stage} · {(progress.Total>0?progress.Completed*100d/progress.Total:0):0}%",progress.Error is null?InfoBarSeverity.Informational:InfoBarSeverity.Error);if(!progress.Running){if(progress.Error is not null)return;break;}}
             await _backend.ApplyUpdateAsync();_realExit=true;await Task.Delay(250);Close();
         }
         catch(Exception ex){if(interactive)ShowGlobal("Update failed",ex.Message,InfoBarSeverity.Error);}
@@ -574,8 +644,9 @@ public sealed partial class MainWindow : Window
     }
     private async Task ReloadVisibleAsync(){await RefreshStatusAsync();await RefreshModelsAsync();await RefreshRequestsAsync();}
     private void ExitCompletely(){_realExit=true;Close();}
-    private void ShowModelsError(Exception ex){ModelsInfo.Title="Model action failed";ModelsInfo.Message=ex.Message;ModelsInfo.Severity=InfoBarSeverity.Error;ModelsInfo.IsOpen=true;}
-    private void ShowGlobal(string title,string message,InfoBarSeverity severity){GlobalInfo.Title=title;GlobalInfo.Message=message;GlobalInfo.Severity=severity;GlobalInfo.IsOpen=true;}
+    private void ShowInfoBar(InfoBar infoBar,string title,string message,InfoBarSeverity severity){infoBar.Title=title;infoBar.Message=message;infoBar.Severity=severity;infoBar.IsOpen=true;ScheduleInfoBarDismissal(infoBar);}
+    private void ShowModelsError(Exception ex)=>ShowInfoBar(ModelsInfo,"Model action failed",ex.Message,InfoBarSeverity.Error);
+    private void ShowGlobal(string title,string message,InfoBarSeverity severity)=>ShowInfoBar(GlobalInfo,title,message,severity);
 }
 
 public sealed class ModelItemView

@@ -53,4 +53,4 @@ Ordinary preferences save automatically. Model profiles and API restarts remain 
 See `docs/RELEASE-NOTES-0.0.1.md` and the complete product plan in
 `docs/NEXT-VERSION-0.0.1-PLAN.md`.
 
-<p><small>BY</small><br><img src="assets/2beng2.png" alt="2beng2" width="120"></p>
+<p><small>By</small><br><img src="assets/2beng2.png" alt="2beng2" width="120"></p>

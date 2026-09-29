@@ -72,7 +72,24 @@
                                 <TextBlock x:Name="SidebarVramText" Text="VRAM information unavailable" Style="{StaticResource CaptionStyle}" FontSize="9" />
                             </StackPanel>
                         </Border>
-                        <StackPanel Orientation="Horizontal" Spacing="9" Margin="8,0"><Border Width="30" Height="30" CornerRadius="9" Background="{ThemeResource AccentSoftBrush}"><TextBlock Text="NE" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" /></Border><StackPanel VerticalAlignment="Center"><TextBlock Text="Local workspace" FontSize="11" FontWeight="SemiBold" /><TextBlock Text="NInferEZ Manager" Style="{StaticResource CaptionStyle}" FontSize="9" /></StackPanel></StackPanel>
+                        <Grid Margin="6,0" ColumnSpacing="7" HorizontalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="32" Height="32" CornerRadius="10" Background="{ThemeResource AccentSoftBrush}">
+                                <TextBlock Text="NE" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10.5" FontWeight="SemiBold" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Local workspace" FontSize="10.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="NInferEZ Manager" Style="{StaticResource CaptionStyle}" FontSize="8.5" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <StackPanel x:Name="SidebarPublisherSignature" Grid.Column="2" Orientation="Horizontal" Spacing="3" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTipService.ToolTip="Created by 2beng2">
+                                <TextBlock Text="By" Style="{StaticResource CaptionStyle}" FontSize="8" VerticalAlignment="Center" />
+                                <Image x:Name="SidebarPublisherLogo" Width="54" Height="27" Stretch="Uniform" AutomationProperties.Name="2beng2" />
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                     <Border x:Name="PaneFooterCompact" Width="44" Height="44" HorizontalAlignment="Center" VerticalAlignment="Bottom" Visibility="Collapsed" CornerRadius="12" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1">
                         <Grid><FontIcon Glyph="&#xE950;" FontSize="17" HorizontalAlignment="Center" VerticalAlignment="Center" /><Ellipse Width="8" Height="8" Margin="0,8,8,0" Fill="{ThemeResource SuccessBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" /></Grid>
@@ -247,7 +264,7 @@
                     <ScrollViewer x:Name="ModelsPage" Visibility="Collapsed">
                         <StackPanel Padding="34,30,34,60" Spacing="15" MaxWidth="1420" HorizontalAlignment="Stretch">
                             <Grid x:Name="ModelsHeader" ColumnSpacing="10" RowSpacing="10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                                 <StackPanel Spacing="5">
                                     <TextBlock Text="MODEL LIBRARY" Style="{StaticResource EyebrowStyle}" />
@@ -395,7 +412,7 @@
                                 <Grid ColumnSpacing="17">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="62" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <Border Width="58" Height="58" CornerRadius="17" Background="{ThemeResource AccentBrush}"><TextBlock Text="N" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF071410" FontSize="24" FontWeight="Bold" /></Border>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4"><Border Style="{StaticResource PillStyle}" HorizontalAlignment="Left"><TextBlock Text="INSTALLED" FontSize="9" /></Border><TextBlock Text="NInferEZ Engine" Style="{StaticResource SectionTitleStyle}" /><TextBlock x:Name="EngineCompatibilityText" Text="NInfer All compatible · Windows x64" Style="{StaticResource CaptionStyle}" /><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="BY" Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" FontSize="9" /><Image Source="Assets/2beng2.png" Width="58" Height="24" Stretch="Uniform" AutomationProperties.Name="2beng2" /></StackPanel></StackPanel>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4"><Border Style="{StaticResource PillStyle}" HorizontalAlignment="Left"><TextBlock Text="INSTALLED" FontSize="9" /></Border><TextBlock Text="NInferEZ Engine" Style="{StaticResource SectionTitleStyle}" /><TextBlock x:Name="EngineCompatibilityText" Text="NInfer All compatible · Windows x64" Style="{StaticResource CaptionStyle}" /><StackPanel x:Name="EnginePublisherSignature" Orientation="Horizontal" Spacing="6"><TextBlock Text="By" Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" FontSize="8" /><Image x:Name="EnginePublisherLogo" Width="58" Height="24" Stretch="Uniform" AutomationProperties.Name="2beng2" /></StackPanel></StackPanel>
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"><TextBlock Text="APPLICATION VERSION" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock x:Name="AboutVersionText" Text="NInferEZ Manager" Style="{StaticResource MetricValueStyle}" FontSize="17" /><TextBlock x:Name="EngineStateText" Text="Checking engine" Foreground="{ThemeResource AccentBrush}" FontSize="10" HorizontalAlignment="Right" /></StackPanel>
                                 </Grid>
                             </Border>
