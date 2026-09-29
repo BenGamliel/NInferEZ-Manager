@@ -827,8 +827,8 @@ Portable ו־Installer נקיים אינם משכפלים מנוע. בהפעלה
 - first-run setup מחייב בחירת מנוע כאשר אין מנוע מותקן, ממליץ לפי GPU ומאפשר בחירה ידנית.
 - UpdateService חובר למאגר הרשמי; מנגנוני Portable ו־Installed שומרים Models/Data/Engines
   ומאמתים staging לפני החלפה.
-- Installer, Portable נקי ו־Test Portable נבנו מחדש ב־`dev-003` מה־commit `4859fa3`;
-  בדיקות פרטיות החבילות, 61 hashes ו־smoke test מתוך החבילה עברו.
+- Installer, Portable נקי ו־Test Portable נבנו מחדש ב־`dev-011` מה־commit `806db97`;
+  בדיקות פרטיות החבילות, 65 hashes ו־smoke test מתוך החבילה עברו.
 - בדיקות backend, build, feed מקוון ו־packaging עברו ללא הפעלת inference על GPU.
 - GitHub Actions עבר בהצלחה ב־Windows: restore, build, host-only tests ו־feed validation.
 - לוגו `2beng2` נוסף כחתימת `By` משנית בדף Engine, בתחתית התפריט הפתוח ובתיעוד;
