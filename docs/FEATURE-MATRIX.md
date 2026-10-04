@@ -1,5 +1,7 @@
 # Feature inventory and reuse plan
 
+> Historical reuse inventory, not a completed-feature checklist. Current completion evidence is in [ACCEPTANCE-MATRIX.md](ACCEPTANCE-MATRIX.md).
+
 This inventory is based on the current NInferEZ source and the existing full
 NInfer Manager backend. “Reuse” means extracting or adapting reviewed behavior,
 not copying either previous UI.

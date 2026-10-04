@@ -9,6 +9,7 @@ public partial class App : Application
     private const string ActivationPipeName="NInferEZ.Manager.Activation.v1";
     private Window? _window;
     private Mutex? _instanceMutex;
+    private readonly CancellationTokenSource _activationLifetime=new();
     public App()
     {
         UnhandledException += (_, e) =>
@@ -32,6 +33,7 @@ public partial class App : Application
                 return;
             }
             _window = new MainWindow();
+            _window.Closed+=(_,_)=>{_activationLifetime.Cancel();try{_instanceMutex?.ReleaseMutex();}catch(ApplicationException){}finally{_instanceMutex?.Dispose();_instanceMutex=null;}};
             _=ListenForActivationAsync();
             _window.Activate();
         }
@@ -60,19 +62,20 @@ public partial class App : Application
 
     private async Task ListenForActivationAsync()
     {
-        while(true)
+        while(!_activationLifetime.IsCancellationRequested)
         {
             try
             {
                 await using var server=new NamedPipeServerStream(ActivationPipeName,PipeDirection.In,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous|PipeOptions.CurrentUserOnly);
-                await server.WaitForConnectionAsync();
+                await server.WaitForConnectionAsync(_activationLifetime.Token);
                 if(_window is MainWindow mainWindow)
                     mainWindow.DispatcherQueue.TryEnqueue(mainWindow.ActivateFromSecondaryInstance);
             }
             catch(ObjectDisposedException){return;}
+            catch(OperationCanceledException){return;}
             catch
             {
-                await Task.Delay(250);
+                try{await Task.Delay(250,_activationLifetime.Token);}catch(OperationCanceledException){return;}
             }
         }
     }

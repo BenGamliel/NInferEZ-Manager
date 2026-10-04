@@ -1,7 +1,9 @@
 NInferEZ Manager data directory
 ===============================
 
-The application creates settings, logs, catalog metadata, diagnostics and
-update downloads here at runtime. A clean release contains only this file.
+Portable creates settings, logs, catalog metadata, diagnostics and update
+downloads here at runtime. Installed Manager normally stores them in
+%LOCALAPPDATA%\NInferEZ Manager\Data, not in the program folder. The application
+shows the actual location. A clean release contains only this file.
 
 Do not put model weights in this folder. Use Models instead.

@@ -31,7 +31,15 @@ public sealed record ManagerStatus(
     string? ActiveModelName,
     int ActiveRequests,
     GpuStatus? Gpu,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt)
+{
+    public string? LoadedModelId { get; init; }
+    public int? LoadedContext { get; init; }
+    public int? LoadedBackendPort { get; init; }
+    public string? LoadedEngineArchitecture { get; init; }
+    public string? LoadedEngineVersion { get; init; }
+    public bool ApiEnabled { get; init; } = true;
+}
 
 public sealed record EngineOperationStatus(
     string? OperationId,
@@ -43,10 +51,16 @@ public sealed record EngineOperationStatus(
     bool CanCancel,
     string? Error = null);
 
-public sealed record GpuStatus(string Name, int UsedMiB, int TotalMiB, int UtilizationPercent, int TemperatureC);
+public sealed record GpuStatus(string Name, int UsedMiB, int TotalMiB, int UtilizationPercent, int TemperatureC)
+{
+    public int DeviceIndex { get; init; }
+    public string? Uuid { get; init; }
+}
 
 public sealed class ManagerSettings
 {
+    public int SchemaVersion { get; set; } = 1;
+    public long Revision { get; set; }
     public ThemePreference Theme { get; set; } = ThemePreference.System;
     public bool StartMinimized { get; set; }
     public bool StartWithWindows { get; set; }
@@ -62,6 +76,7 @@ public sealed class ManagerSettings
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
     public int PublicPort { get; set; } = 8173;
     public bool LockPublicPort { get; set; }
+    public bool AllowLocalNetwork { get; set; }
     public int BackendPort { get; set; } = 48174;
     public string ApiKey { get; set; } = string.Empty;
     public bool CorsEnabled { get; set; } = true;
@@ -72,6 +87,7 @@ public sealed class ManagerSettings
     public Dictionary<string, string> ExternalModelPaths { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> ModelAliases { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, ModelProfile> Profiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> SeenModelArtifacts { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class ModelProfile
@@ -103,6 +119,11 @@ public sealed class ModelProfile
     public int DeviceStateSlots { get; set; }
     public int HostStateSlots { get; set; }
     public int HostKvMiB { get; set; }
+    public int? HostCacheMiB { get; set; }
+    public int KvHeadroomMiB { get; set; } = 1024;
+    public int NgramDraftTokens { get; set; }
+    public bool StructuredOutput { get; set; }
+    public bool AlternativePrefixCache { get; set; }
     public int ResponseStoreMaxRecords { get; set; } = 1024;
     public int ResponseStoreMaxMiB { get; set; } = 256;
     public bool ThinkingEnabled { get; set; } = true;
@@ -143,6 +164,15 @@ public sealed record ModelInfo(
     bool Featured = false,
     bool IsNew = false)
 {
+    public string Origin { get; init; } = "Remote";
+    public bool Inspected { get; init; }
+    public bool LinkedExternal { get; init; }
+    public bool Missing { get; init; }
+    public string? InspectionMessage { get; init; }
+    public string? PresetStatus { get; init; }
+    public bool HasMtp { get; init; }
+    public bool HasDflash { get; init; }
+    public bool HasDflash2 { get; init; }
     public string ModelCardUrl => $"https://huggingface.co/{Repository}";
     public string SizeText => SizeBytes <= 0 ? "Unknown" : $"{SizeBytes / 1024d / 1024d / 1024d:0.00} GiB";
 }
@@ -167,7 +197,7 @@ public sealed record RequestMetricsSnapshot(
     IReadOnlyList<RequestMetric> Requests,
     int CompletedCount,
     int FailedCount,
-    int TotalTokens,
+    long TotalTokens,
     double? AverageDecode,
     double? AverageTtft);
 

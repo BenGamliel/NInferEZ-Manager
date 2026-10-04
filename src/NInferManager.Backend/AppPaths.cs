@@ -4,7 +4,7 @@ public sealed class AppPaths
 {
     public AppPaths()
     {
-        var processDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        var processDirectory = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
         AppDirectory = Path.GetFileName(processDirectory).Equals("Backend", StringComparison.OrdinalIgnoreCase)
             ? Directory.GetParent(processDirectory)?.FullName ?? processDirectory
             : processDirectory;
@@ -12,8 +12,21 @@ public sealed class AppPaths
         var dataOverride = Environment.GetEnvironmentVariable("NINFEREZ_MANAGER_DATA_ROOT");
         var modelOverride = Environment.GetEnvironmentVariable("NINFEREZ_MANAGER_MODELS_ROOT");
         var engineOverride = Environment.GetEnvironmentVariable("NINFEREZ_MANAGER_ENGINE_ROOT");
-        DataDirectory = Resolve(dataOverride, Path.Combine(AppDirectory, "Data"));
-        ModelsDirectory = Resolve(modelOverride, Path.Combine(AppDirectory, "Models"));
+        var userRoot = IsPortable ? AppDirectory : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NInferEZ Manager");
+        DataDirectory = Resolve(dataOverride, Path.Combine(userRoot, "Data"));
+        ModelsDirectory = Resolve(modelOverride, Path.Combine(userRoot, "Models"));
+        var legacyData = Path.Combine(AppDirectory, "Data");
+        LegacyEnginesDirectory=Path.Combine(legacyData,"engines");
+        if (!IsPortable && string.IsNullOrWhiteSpace(dataOverride) && !Directory.Exists(DataDirectory) && File.Exists(Path.Combine(legacyData,"settings.json")))
+        {
+            Directory.CreateDirectory(userRoot);
+            if(Path.GetPathRoot(legacyData)!.Equals(Path.GetPathRoot(DataDirectory),StringComparison.OrdinalIgnoreCase))Directory.Move(legacyData, DataDirectory);
+            else
+            {
+                Directory.CreateDirectory(DataDirectory);
+                File.Copy(Path.Combine(legacyData,"settings.json"),Path.Combine(DataDirectory,"settings.json"),false);
+            }
+        }
         EngineDirectory = Resolve(engineOverride, Path.Combine(AppDirectory, "Engine"));
         EnginesDirectory = Path.Combine(DataDirectory, "engines");
         CurrentEngineFile = Path.Combine(EnginesDirectory, "current.json");
@@ -33,6 +46,7 @@ public sealed class AppPaths
     public string ModelsDirectory { get; }
     public string EngineDirectory { get; }
     public string EnginesDirectory { get; }
+    public string LegacyEnginesDirectory { get; }
     public string CurrentEngineFile { get; }
     public string EngineCatalogCacheFile { get; }
     public string SettingsFile { get; }

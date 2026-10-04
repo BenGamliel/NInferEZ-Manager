@@ -12,7 +12,8 @@ public sealed class TrayIconController : IDisposable
     private readonly IntPtr _originalProc;
     private NotifyIconData _data;
     private bool _disposed;
-    private bool _modelLoaded;
+    private EngineState _state;
+    private readonly uint _taskbarCreated=RegisterWindowMessage("TaskbarCreated");
 
     public event Action? RestoreRequested;
     public event Action? PrimaryActionRequested;
@@ -24,31 +25,37 @@ public sealed class TrayIconController : IDisposable
     public TrayIconController(IntPtr window)
     {
         _window=window;
-        var iconPath=Path.Combine(AppContext.BaseDirectory,"Assets","NInferEZ.ico");
+        var executableDirectory=Path.GetDirectoryName(Environment.ProcessPath)??AppContext.BaseDirectory;
+        var iconPath=Path.Combine(executableDirectory,"Assets","NInferEZ.ico");
         ExtractIconEx(File.Exists(iconPath)?iconPath:Environment.ProcessPath!,0,out var large,out var small,1);
         _icon=small!=IntPtr.Zero?small:large;
         if(small!=IntPtr.Zero&&large!=IntPtr.Zero)DestroyIcon(large);
         _windowProc=WndProc;
         _originalProc=SetWindowLongPtr(_window,-4,Marshal.GetFunctionPointerForDelegate(_windowProc));
         _data=new NotifyIconData{cbSize=(uint)Marshal.SizeOf<NotifyIconData>(),hWnd=_window,uID=1,uFlags=0x1|0x2|0x4,uCallbackMessage=CallbackMessage,hIcon=_icon,szTip="NInferEZ Manager - Unloaded",szInfo=string.Empty,szInfoTitle=string.Empty};
-        if(!Shell_NotifyIcon(0,ref _data))throw new InvalidOperationException("Windows could not create the notification-area icon.");
+        if(!Shell_NotifyIcon(0,ref _data)){SetWindowLongPtr(_window,-4,_originalProc);if(_icon!=IntPtr.Zero)DestroyIcon(_icon);throw new InvalidOperationException("Windows could not create the notification-area icon.");}
         _data.uTimeoutOrVersion=4;Shell_NotifyIcon(4,ref _data);
     }
 
     public void SetStatus(EngineState state,string? modelName)
     {
-        _modelLoaded=state==EngineState.Ready;
-        var status=_modelLoaded?modelName??"Ready":state.ToString();
+        _state=state;
+        var status=state==EngineState.Ready?modelName??"Ready":state.ToString();
         var value="NInferEZ Manager - "+status;_data.szTip=value.Length>127?value[..127]:value;_data.uFlags=0x4;Shell_NotifyIcon(1,ref _data);
     }
 
     private IntPtr WndProc(IntPtr hwnd,uint message,IntPtr wParam,IntPtr lParam)
     {
+        if(message==_taskbarCreated)
+        {
+            _data.uFlags=0x1|0x2|0x4;Shell_NotifyIcon(0,ref _data);_data.uTimeoutOrVersion=4;Shell_NotifyIcon(4,ref _data);
+            return IntPtr.Zero;
+        }
         if(message==CallbackMessage)
         {
             var mouse=(uint)(lParam.ToInt64()&0xffff);
-            if(mouse==0x203)RestoreRequested?.Invoke();
-            else if(mouse==0x205)ShowMenu();
+            if(mouse is 0x203 or 0x400 or 0x401)RestoreRequested?.Invoke();
+            else if(mouse is 0x205 or 0x7B)ShowMenu();
             return IntPtr.Zero;
         }
         return CallWindowProc(_originalProc,hwnd,message,wParam,lParam);
@@ -59,7 +66,7 @@ public sealed class TrayIconController : IDisposable
         try
         {
             Add(menu,1,"Open NInferEZ Manager");AppendMenu(menu,0x800,UIntPtr.Zero,null);
-            Add(menu,3,_modelLoaded?"Unload model":"Load model");if(_modelLoaded)Add(menu,5,"Restart NInfer");
+            AppendMenu(menu,_state==EngineState.Unloading?1u:0u,3,_state switch{EngineState.Ready=>"Unload model",EngineState.Loading=>"Cancel loading",EngineState.Unloading=>"Unloading…",EngineState.Error=>"Retry model load",_=>"Load model"});if(_state==EngineState.Ready)Add(menu,5,"Restart NInfer");
             Add(idle,6,"Off");Add(idle,7,"After 3 minutes");Add(idle,8,"After 10 minutes");Add(idle,9,"After 30 minutes");AppendMenu(menu,0x10,(UIntPtr)(ulong)idle.ToInt64(),"Automatic VRAM unload");
             Add(menu,10,"Check for updates");AppendMenu(menu,0x800,UIntPtr.Zero,null);Add(menu,11,"Exit");
             GetCursorPos(out var point);SetForegroundWindow(_window);var command=TrackPopupMenu(menu,0x100|0x2,point.X,point.Y,0,_window,IntPtr.Zero);
@@ -87,4 +94,5 @@ public sealed class TrayIconController : IDisposable
     [DllImport("user32.dll")]private static extern bool GetCursorPos(out Point point);
     [DllImport("user32.dll")]private static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")]private static extern bool DestroyIcon(IntPtr icon);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern uint RegisterWindowMessage(string message);
 }

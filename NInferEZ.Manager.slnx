@@ -3,5 +3,7 @@
   <Project Path="src/NInferManager.Backend/NInferManager.Backend.csproj" />
   <Project Path="src/NInferManager.WinUI/NInferManager.WinUI.csproj" />
   <Project Path="tests/NInferManager.Backend.Tests/NInferManager.Backend.Tests.csproj" />
+  <Project Path="tests/NInferManager.Update.Tests/NInferManager.Update.Tests.csproj" />
+  <Project Path="tests/NInferManager.Control.Tests/NInferManager.Control.Tests.csproj" />
 </Solution>
 

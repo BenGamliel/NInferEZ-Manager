@@ -28,7 +28,7 @@ UninstallDisplayIcon={app}\NInferEZ Manager.exe
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-CloseApplications=force
+CloseApplications=yes
 RestartApplications=no
 VersionInfoVersion={#AppVersion}
 
@@ -48,6 +48,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Run]
 Filename: "{app}\NInferEZ Manager.exe"; Description: "Launch NInferEZ Manager"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\NInferEZ Manager.exe"; Flags: nowait; Check: IsAutomaticUpdate
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "NInferEZ Manager"; Flags: uninsdeletevalue dontcreatekey
@@ -64,12 +65,17 @@ Type: filesandordirs; Name: "{tmp}\NInferEZ-Manager-Update-*"
 var
   RemoveUserData: Boolean;
 
+function IsAutomaticUpdate(): Boolean;
+begin
+  Result := ExpandConstant('{param:NINFEREZUPDATE|0}') = '1';
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   RemoveUserData := MsgBox(
-    'Remove downloaded models, settings, and logs too?' + #13#10 + #13#10 +
-    'Choose No to keep the Models and Data folders.',
-    mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDYES;
+    'Remove application-managed models, downloaded engines, settings, and logs too?' + #13#10 + #13#10 +
+    'Choose No to keep them. Linked model files outside the application folders are never removed.',
+    mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
   Result := True;
 end;
 
@@ -79,5 +85,7 @@ begin
   begin
     DelTree(ExpandConstant('{app}\Models'), True, True, True);
     DelTree(ExpandConstant('{app}\Data'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\NInferEZ Manager\Models'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\NInferEZ Manager\Data'), True, True, True);
   end;
 end;

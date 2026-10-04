@@ -18,6 +18,9 @@ public sealed class EnginePackageService : IDisposable
     private readonly SemaphoreSlim _installGate = new(1, 1);
     private EngineChannel _channel = BuiltInChannel();
     private CancellationTokenSource? _downloadCancellation;
+    private Task? _installTask;
+    private readonly SemaphoreSlim _refreshGate = new(1,1);
+    public Func<Action,CancellationToken,Task>? CommitInstallation { get; set; }
     public EnginePackageProgress Current { get; private set; } = new("Idle", null, 0, 0, false);
 
     public EnginePackageService(AppPaths paths, ManagerLog log, SettingsService settings)
@@ -36,8 +39,9 @@ public sealed class EnginePackageService : IDisposable
             var pointer = ReadPointer();
             if (pointer is not null)
             {
-                var root = Path.GetFullPath(Path.Combine(_paths.EnginesDirectory, pointer.RelativePath));
-                if (IsUnder(root, _paths.EnginesDirectory) && File.Exists(Path.Combine(root, "ninfer-serve.exe"))) return root;
+                var storageRoot=pointer.StorageRoot??_paths.EnginesDirectory;
+                var root = Path.GetFullPath(Path.Combine(storageRoot, pointer.RelativePath));
+                if (IsUnder(root, storageRoot) && File.Exists(Path.Combine(root, "ninfer-serve.exe"))) return root;
             }
             return _paths.EngineDirectory;
         }
@@ -62,29 +66,34 @@ public sealed class EnginePackageService : IDisposable
 
     public async Task RefreshAsync(CancellationToken token = default)
     {
-        using var response = await _client.GetAsync(ProductInfo.EngineChannelUrl, token);
+        await _refreshGate.WaitAsync(token);
+        try
+        {
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(25));
+        using var response = await _client.GetAsync(ProductInfo.EngineChannelUrl,HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadAsStringAsync(token);
+        var json = await BoundedHttpContent.ReadTextAsync(response.Content,timeout.Token);
         var channel = ParseAndValidateChannel(json);
         var temporary = _paths.EngineCatalogCacheFile + ".tmp";
         await File.WriteAllTextAsync(temporary, json, token);
         File.Move(temporary, _paths.EngineCatalogCacheFile, true);
         _channel = channel;
-        _settings.Current.LastEngineCheckUtc = DateTimeOffset.UtcNow;
-        _settings.Save();
+        _settings.Update(s=>s.LastEngineCheckUtc=DateTimeOffset.UtcNow);
         _log.Write($"Engine channel refreshed with {channel.Packages.Count} compatible package(s).");
+        }
+        finally{_refreshGate.Release();}
     }
     public bool ShouldRefresh() => _settings.Current.AutoCheckEngines && (_settings.Current.LastEngineCheckUtc is null || DateTimeOffset.UtcNow - _settings.Current.LastEngineCheckUtc >= TimeSpan.FromHours(Math.Max(1, _settings.Current.EngineCheckHours)));
 
     public void StartInstall(string version, string architecture)
     {
-        if (_downloadCancellation is not null && !_downloadCancellation.IsCancellationRequested && Current.Running)
+        if (_installTask is {IsCompleted:false})
             throw new InvalidOperationException("An engine package is already downloading.");
         var package = Find(version, architecture);
         _downloadCancellation?.Dispose();
         _downloadCancellation = new CancellationTokenSource();
         Current = new("Starting", package.FileName, 0, package.SizeBytes, true);
-        _ = InstallAsync(package, _downloadCancellation.Token);
+        _installTask = InstallAsync(package, _downloadCancellation.Token);
     }
 
     public void CancelInstall() => _downloadCancellation?.Cancel();
@@ -129,8 +138,8 @@ public sealed class EnginePackageService : IDisposable
                 if (!hash.Equals(package.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The engine package failed SHA-256 verification.");
             }
             Current = new("Installing", package.FileName, package.SizeBytes, package.SizeBytes, true);
-            InstallArchive(partial, package);
-            Activate(package.EngineVersion, package.CudaArchitecture);
+            if(CommitInstallation is not null)await CommitInstallation(()=>{token.ThrowIfCancellationRequested();InstallArchive(partial,package);Activate(package.EngineVersion,package.CudaArchitecture);},token);
+            else{InstallArchive(partial,package);Activate(package.EngineVersion,package.CudaArchitecture);}
             File.Delete(partial);
             Current = new("Ready", package.FileName, package.SizeBytes, package.SizeBytes, false);
         }
@@ -143,7 +152,7 @@ public sealed class EnginePackageService : IDisposable
             _log.Write("Engine package installation failed", ex);
             Current = new("Failed", package.FileName, 0, package.SizeBytes, false, ex.Message);
         }
-        finally { _installGate.Release(); }
+        finally { try{if(File.Exists(partial))File.Delete(partial);}catch(IOException){} _installGate.Release(); }
     }
 
     private void InstallArchive(string archivePath, EnginePackage package)
@@ -175,7 +184,9 @@ public sealed class EnginePackageService : IDisposable
                 throw new InvalidDataException("The engine manifest does not match the selected package.");
             var source = Path.GetDirectoryName(manifests[0])!;
             if (!File.Exists(Path.Combine(source, "ninfer-serve.exe"))) throw new InvalidDataException("ninfer-serve.exe is missing from the engine package.");
-            var destinationRoot = Path.Combine(_paths.EnginesDirectory, RelativeRoot(package));
+            if (!File.Exists(Path.Combine(source,"ninfer-inspect.exe")))throw new InvalidDataException("ninfer-inspect.exe is missing from the engine package.");
+            var destinationRoot = Path.GetFullPath(Path.Combine(_paths.EnginesDirectory, RelativeRoot(package)));
+            if(!IsUnder(destinationRoot,_paths.EnginesDirectory))throw new InvalidDataException("The engine installation destination is unsafe.");
             var previous = destinationRoot + ".previous";
             Directory.CreateDirectory(Path.GetDirectoryName(destinationRoot)!);
             if (Directory.Exists(previous)) Directory.Delete(previous, true);
@@ -193,14 +204,17 @@ public sealed class EnginePackageService : IDisposable
     }
     private static EngineChannel ParseAndValidateChannel(string json)
     {
+        if(json.Length>2*1024*1024)throw new InvalidDataException("The engine channel is too large.");
         var channel = JsonSerializer.Deserialize<EngineChannel>(json, JsonOptions()) ?? throw new InvalidDataException("The engine channel is empty.");
         if (channel.SchemaVersion != 1 || channel.Product != "NInferEZ Engine") throw new InvalidDataException("The engine channel schema or product is unsupported.");
         foreach (var package in channel.Packages) Validate(package);
+        if(channel.Packages.Select(p=>$"{p.EngineVersion}/{p.CudaArchitecture}").Distinct(StringComparer.OrdinalIgnoreCase).Count()!=channel.Packages.Count)throw new InvalidDataException("The engine channel contains duplicate package identifiers.");
         return channel with { Packages = channel.Packages.Where(IsSupportedPackage).ToArray() };
     }
     private static void Validate(EnginePackage p)
     {
-        if (p.ContractVersion is < ProductInfo.MinimumEngineContract or > ProductInfo.MaximumEngineContract || p.Platform != "windows-x64"
+        if (!System.Text.RegularExpressions.Regex.IsMatch(p.EngineVersion,@"^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$")||p.EngineVersion.Length>80||p.CudaArchitecture is not ("sm86" or "sm89" or "sm120a")
+            || p.ContractVersion is < ProductInfo.MinimumEngineContract or > ProductInfo.MaximumEngineContract || p.Platform != "windows-x64"
             || p.SizeBytes is <= 0 or > MaximumArchiveBytes || p.Sha256.Length != 64 || !p.Sha256.All(Uri.IsHexDigit)
             || Path.GetFileName(p.FileName) != p.FileName || !Uri.TryCreate(p.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https"
             || uri.Host != "github.com" || !uri.AbsolutePath.StartsWith("/BenGamliel/NInferEZ-Engine/releases/download/", StringComparison.Ordinal))
@@ -208,12 +222,37 @@ public sealed class EnginePackageService : IDisposable
     }
     private static bool IsSupportedPackage(EnginePackage p) => p.Platform == "windows-x64" && p.ContractVersion is >= ProductInfo.MinimumEngineContract and <= ProductInfo.MaximumEngineContract;
     private EnginePackage Find(string version, string architecture) => _channel.Packages.FirstOrDefault(p => p.EngineVersion.Equals(version, StringComparison.OrdinalIgnoreCase) && p.CudaArchitecture.Equals(architecture, StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidOperationException("The selected engine package is not in the verified channel.");
-    private bool IsInstalled(EnginePackage p) => File.Exists(Path.Combine(_paths.EnginesDirectory, RelativeRoot(p), "ninfer-serve.exe"));
+    private bool IsInstalled(EnginePackage p)
+    {
+        try
+        {
+            var root=Path.Combine(_paths.EnginesDirectory,RelativeRoot(p));
+            if(!File.Exists(Path.Combine(root,"ninfer-serve.exe"))||!File.Exists(Path.Combine(root,"ninfer-inspect.exe")))return false;
+            var manifest=JsonSerializer.Deserialize<InstalledManifest>(File.ReadAllText(Path.Combine(root,"engine-manifest.json")),JsonOptions());
+            return manifest is not null&&manifest.Product=="NInferEZ Engine"&&manifest.ContractVersion is >=ProductInfo.MinimumEngineContract and <=ProductInfo.MaximumEngineContract&&manifest.EngineVersion==p.EngineVersion&&manifest.CudaArchitecture==p.CudaArchitecture;
+        }
+        catch{return false;}
+    }
     private static bool BundledMatches(InstalledManifest? bundled, EnginePackage package) => bundled is not null
         && bundled.EngineVersion.Equals(package.EngineVersion,StringComparison.OrdinalIgnoreCase)
         && bundled.CudaArchitecture.Equals(package.CudaArchitecture,StringComparison.OrdinalIgnoreCase);
     private static string RelativeRoot(EnginePackage p) => Path.Combine(p.EngineVersion, p.CudaArchitecture);
-    private CurrentEnginePointer? ReadPointer() { try { return File.Exists(_paths.CurrentEngineFile) ? JsonSerializer.Deserialize<CurrentEnginePointer>(File.ReadAllText(_paths.CurrentEngineFile), JsonOptions()) : null; } catch { return null; } }
+    private CurrentEnginePointer? ReadPointer()
+    {
+        foreach(var storage in new[]{_paths.EnginesDirectory,_paths.LegacyEnginesDirectory}.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var file=Path.Combine(storage,"current.json");if(!File.Exists(file))continue;
+                var p=JsonSerializer.Deserialize<CurrentEnginePointer>(File.ReadAllText(file),JsonOptions());
+                if(p is null||p.SchemaVersion!=1||p.CudaArchitecture is not("sm86" or "sm89" or "sm120a")||p.EngineVersion.Length>80||!System.Text.RegularExpressions.Regex.IsMatch(p.EngineVersion,@"^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$"))continue;
+                if(p.RelativePath.Replace('/',Path.DirectorySeparatorChar)!=Path.Combine(p.EngineVersion,p.CudaArchitecture))continue;
+                return p with{StorageRoot=storage};
+            }
+            catch{}
+        }
+        return null;
+    }
     private void WritePointer(CurrentEnginePointer pointer) { var temp = _paths.CurrentEngineFile + ".tmp"; File.WriteAllText(temp, JsonSerializer.Serialize(pointer, JsonOptions())); File.Move(temp, _paths.CurrentEngineFile, true); }
     private string? ReadBundledArchitecture() => ReadBundledManifest()?.CudaArchitecture;
     private string? ReadBundledVersion() => ReadBundledManifest()?.EngineVersion;
@@ -221,9 +260,9 @@ public sealed class EnginePackageService : IDisposable
     public static string? RecommendArchitecture(string? gpuName)
     {
         if (string.IsNullOrWhiteSpace(gpuName)) return null;
-        if (gpuName.Contains("RTX 50", StringComparison.OrdinalIgnoreCase) || gpuName.Contains("Blackwell", StringComparison.OrdinalIgnoreCase)) return "sm120a";
-        if (gpuName.Contains("RTX 40", StringComparison.OrdinalIgnoreCase) || gpuName.Contains("Ada", StringComparison.OrdinalIgnoreCase)) return "sm89";
-        if (gpuName.Contains("RTX 30", StringComparison.OrdinalIgnoreCase) || gpuName.Contains("Ampere", StringComparison.OrdinalIgnoreCase)) return "sm86";
+        if (gpuName.Contains("GeForce RTX 50", StringComparison.OrdinalIgnoreCase) || gpuName.Contains("RTX PRO 6000 Blackwell", StringComparison.OrdinalIgnoreCase)) return "sm120a";
+        if (gpuName.Contains("GeForce RTX 40", StringComparison.OrdinalIgnoreCase)) return "sm89";
+        if (gpuName.Contains("GeForce RTX 30", StringComparison.OrdinalIgnoreCase)) return "sm86";
         return null;
     }
     private static bool IsUnder(string path, string root) => path.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
@@ -234,10 +273,13 @@ public sealed class EnginePackageService : IDisposable
         new("0.1.0-preview.1",1,"windows-x64","sm89","NVIDIA Ada / RTX 4000 Series",["NVIDIA GeForce RTX 4090"],false,"preview","build-verified-preview","NInferEZ-Engine-0.1.0-preview.1-sm89-windows-x64.zip",1327225574,"1c7f0ff4198d5d5987dad3569c6a3aed7c3e0cb08e684e363cae9e823fee7a3d","https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v0.1.0-preview.1/NInferEZ-Engine-0.1.0-preview.1-sm89-windows-x64.zip"),
         new("0.1.0-preview.1",1,"windows-x64","sm120a","NVIDIA Blackwell / RTX 5000 Series",["NVIDIA GeForce RTX 5090","NVIDIA RTX PRO 6000 Blackwell"],true,"preview","build-verified-preview","NInferEZ-Engine-0.1.0-preview.1-sm120a-windows-x64.zip",1112591446,"ce1081bbd6ef30828a28e26eec8f4e659c19a21696b17e53bb840fe3377e3306","https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v0.1.0-preview.1/NInferEZ-Engine-0.1.0-preview.1-sm120a-windows-x64.zip")
     ]);
-    public void Dispose() { _downloadCancellation?.Dispose(); _installGate.Dispose(); _client.Dispose(); }
+    public void Dispose() { _downloadCancellation?.Cancel(); _client.Dispose(); }
 
     private sealed record EngineChannel([property: JsonPropertyName("schemaVersion")] int SchemaVersion, [property: JsonPropertyName("product")] string Product, [property: JsonPropertyName("updatedAt")] DateTimeOffset UpdatedAt, [property: JsonPropertyName("packages")] IReadOnlyList<EnginePackage> Packages);
     private sealed record EnginePackage([property: JsonPropertyName("engineVersion")] string EngineVersion, [property: JsonPropertyName("contractVersion")] int ContractVersion, [property: JsonPropertyName("platform")] string Platform, [property: JsonPropertyName("cudaArchitecture")] string CudaArchitecture, [property: JsonPropertyName("gpuFamily")] string GpuFamily, [property: JsonPropertyName("gpuModels")] IReadOnlyList<string> GpuModels, [property: JsonPropertyName("nativeNvfp4")] bool NativeNvfp4, [property: JsonPropertyName("channel")] string Channel, [property: JsonPropertyName("qualification")] string Qualification, [property: JsonPropertyName("fileName")] string FileName, [property: JsonPropertyName("sizeBytes")] long SizeBytes, [property: JsonPropertyName("sha256")] string Sha256, [property: JsonPropertyName("url")] string Url);
-    private sealed record CurrentEnginePointer(int SchemaVersion, string EngineVersion, string CudaArchitecture, string RelativePath);
+    private sealed record CurrentEnginePointer(int SchemaVersion, string EngineVersion, string CudaArchitecture, string RelativePath)
+    {
+        [JsonIgnore] public string? StorageRoot{get;init;}
+    }
     private sealed record InstalledManifest(string Product, int ContractVersion, string EngineVersion, string CudaArchitecture);
 }

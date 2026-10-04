@@ -7,7 +7,7 @@
     mc:Ignorable="d"
     Title="NInferEZ Manager">
 
-    <Grid x:Name="Root" Background="{ThemeResource PageBrush}">
+    <Grid x:Name="Root" Background="{ThemeResource PageBrush}" AutomationProperties.Name="NInferEZ Manager workspace">
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="SidebarColumn" Width="236" />
             <ColumnDefinition Width="*" />
@@ -24,26 +24,14 @@
 
                 <Grid x:Name="SidebarHeader" Height="64" Margin="8,8,8,18" BorderBrush="{ThemeResource BorderSoftBrush}" BorderThickness="0,0,0,1">
                     <StackPanel x:Name="SidebarBrandExpanded" Margin="10,0,48,0" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left" VerticalAlignment="Center">
-                        <Border Width="36" Height="36" CornerRadius="11" Background="{ThemeResource AccentBrush}">
-                            <Grid Width="19" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center" ColumnSpacing="3">
-                                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-                                <Border Height="10" VerticalAlignment="Bottom" CornerRadius="2" Background="#FF071410" />
-                                <Border Grid.Column="1" Height="18" VerticalAlignment="Bottom" CornerRadius="2" Background="#FF071410" />
-                                <Border Grid.Column="2" Height="13" VerticalAlignment="Bottom" CornerRadius="2" Background="#FF071410" />
-                            </Grid>
-                        </Border>
+                        <Image x:Name="MainLogoExpanded" Width="36" Height="36" AutomationProperties.Name="NInferEZ" />
                         <StackPanel VerticalAlignment="Center" Spacing="0">
                             <TextBlock Text="NInferEZ" FontFamily="Segoe UI Variable Display" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="MANAGER" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="170" />
                         </StackPanel>
                     </StackPanel>
-                    <Border x:Name="SidebarBrandCompact" Width="36" Height="36" Margin="0,8,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Visibility="Collapsed" CornerRadius="11" Background="{ThemeResource AccentBrush}">
-                        <Grid Width="19" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center" ColumnSpacing="3">
-                            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-                            <Border Height="10" VerticalAlignment="Bottom" CornerRadius="2" Background="#FF071410" />
-                            <Border Grid.Column="1" Height="18" VerticalAlignment="Bottom" CornerRadius="2" Background="#FF071410" />
-                            <Border Grid.Column="2" Height="13" VerticalAlignment="Bottom" CornerRadius="2" Background="#FF071410" />
-                        </Grid>
+                    <Border x:Name="SidebarBrandCompact" Width="36" Height="36" Margin="0,8,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Visibility="Collapsed">
+                        <Image x:Name="MainLogoCompact" Width="36" Height="36" AutomationProperties.Name="NInferEZ" />
                     </Border>
                     <Button x:Name="PaneToggleButton" Width="36" Height="36" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Center" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Click="PaneToggle_Click">
                         <Grid Width="18" Height="16">
@@ -112,26 +100,30 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
-                        <TextBlock Text="NInferEZ Manager" Style="{StaticResource CaptionStyle}" FontSize="12" />
-                        <TextBlock Text="/" Foreground="{ThemeResource BorderBrush}" />
+                        <TextBlock x:Name="TopBreadcrumbApp" Text="NInferEZ Manager" Style="{StaticResource CaptionStyle}" FontSize="12" />
+                        <TextBlock x:Name="TopBreadcrumbSeparator" Text="/" Foreground="{ThemeResource BorderBrush}" />
                         <TextBlock x:Name="TopPageTitle" Text="Overview" FontWeight="SemiBold" />
                     </StackPanel>
                     <Border Grid.Column="1" Padding="11,6" CornerRadius="9" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse Width="7" Height="7" Fill="{ThemeResource SuccessBrush}" VerticalAlignment="Center" />
-                            <TextBlock Text="API ready" Style="{StaticResource CaptionStyle}" FontSize="10" VerticalAlignment="Center" />
+                            <Ellipse x:Name="TopApiIndicator" Width="7" Height="7" Fill="{ThemeResource WarningBrush}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TopApiStatusText" Text="Starting API" Style="{StaticResource CaptionStyle}" FontSize="12" VerticalAlignment="Center" />
                             <TextBlock x:Name="TopEndpoint" Text=":8173" Foreground="{ThemeResource AccentBrush}" FontSize="10" VerticalAlignment="Center" />
+                            <Button x:Name="ApiToggleButton" Content="Turn off" Click="ApiToggle_Click" Padding="7,2" FontSize="11" Background="Transparent" ToolTipService.ToolTip="Temporarily stop the API listener" />
                         </StackPanel>
                     </Border>
-                    <Button Grid.Column="2" Click="CopyEndpoint_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" VerticalAlignment="Center">
+                    <Button Grid.Column="2" Click="CopyEndpoint_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" VerticalAlignment="Center" AutomationProperties.Name="Copy API endpoint" ToolTipService.ToolTip="Copy API endpoint">
                         <StackPanel Orientation="Horizontal" Spacing="7">
                             <FontIcon Glyph="&#xE8C8;" FontSize="13" />
-                            <TextBlock Text="Copy endpoint" />
+                            <TextBlock x:Name="CopyEndpointHeaderLabel" Text="Copy endpoint" />
                         </StackPanel>
                     </Button>
                 </Grid>
 
-                <InfoBar x:Name="GlobalInfo" Grid.Row="1" Margin="24,12,24,0" IsOpen="False" IsClosable="True" />
+                <StackPanel Grid.Row="1" Margin="24,12,24,0" Spacing="8">
+                    <InfoBar x:Name="GlobalInfo" IsOpen="False" IsClosable="True" />
+                    <Border x:Name="ApplicationUpdatePanel" Style="{StaticResource CompactCardStyle}" Visibility="Collapsed"><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="6"><TextBlock x:Name="ApplicationUpdateText" Text="Preparing application update" /><ProgressBar x:Name="ApplicationUpdateProgress" Minimum="0" Maximum="100" /></StackPanel><Button Grid.Column="1" Content="Cancel" Click="CancelApplicationUpdate_Click" VerticalAlignment="Center" /></Grid></Border>
+                </StackPanel>
 
                 <Grid Grid.Row="2">
                     <ScrollViewer x:Name="DashboardPage">
@@ -148,10 +140,10 @@
                                 <StackPanel Spacing="5">
                                     <TextBlock Text="LOCAL INFERENCE" Style="{StaticResource EyebrowStyle}" />
                                     <TextBlock x:Name="EngineHeadline" Text="Everything is ready." Style="{StaticResource PageTitleStyle}" TextWrapping="Wrap" />
-                                    <TextBlock Text="The API is listening. Your selected model loads automatically when it is needed." Style="{StaticResource MutedStyle}" />
+                                    <TextBlock x:Name="EngineSubheadline" Text="Starting the local API. No model memory is reserved until a request needs it." Style="{StaticResource MutedStyle}" />
                                 </StackPanel>
                                 <StackPanel x:Name="EngineActions" Grid.Column="1" Orientation="Horizontal" Spacing="9" VerticalAlignment="Bottom">
-                                    <Button x:Name="EngineMoreButton" Content="•••" Visibility="Collapsed">
+                                    <Button x:Name="EngineMoreButton" Content="•••" Visibility="Collapsed" AutomationProperties.Name="More model actions" ToolTipService.ToolTip="More model actions">
                                         <Button.Flyout><MenuFlyout><MenuFlyoutItem Text="Restart engine" Click="Restart_Click" /></MenuFlyout></Button.Flyout>
                                     </Button>
                                     <Button x:Name="EnginePrimaryButton" Content="Load model" Click="EnginePrimary_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" />
@@ -169,8 +161,8 @@
                                         <Ellipse Width="9" Height="9" Fill="{ThemeResource SuccessBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                        <TextBlock Text="API online · model available on demand" FontSize="12" FontWeight="SemiBold" />
-                                        <TextBlock Text="No model memory is reserved while the engine is unloaded." Style="{StaticResource CaptionStyle}" />
+                                        <TextBlock x:Name="ApiAvailabilityText" Text="Starting local workspace" FontSize="13" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="ModelMemoryText" Text="The model loads only when you use it." Style="{StaticResource CaptionStyle}" />
                                     </StackPanel>
                                     <Border Grid.Column="2" Style="{StaticResource PillStyle}" VerticalAlignment="Center">
                                         <TextBlock x:Name="EngineBadge" Text="UNLOADED" Foreground="{ThemeResource AccentBrush}" FontSize="9" FontWeight="SemiBold" />
@@ -178,15 +170,16 @@
                                 </Grid>
                             </Border>
 
-                            <Grid ColumnSpacing="15" RowSpacing="15">
+                            <Grid x:Name="OverviewDetailsGrid" ColumnSpacing="15" RowSpacing="15">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="1.2*" />
                                     <ColumnDefinition Width="0.8*" />
                                 </Grid.ColumnDefinitions>
-                                <Border Style="{StaticResource CardStyle}" MinHeight="242">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                <Border x:Name="OverviewModelCard" Style="{StaticResource CardStyle}" MinHeight="242">
                                     <StackPanel Spacing="18">
                                         <Grid>
-                                            <TextBlock Text="ACTIVE MODEL" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="100" />
+                                            <TextBlock Text="DEFAULT MODEL" Style="{StaticResource CaptionStyle}" FontSize="11" CharacterSpacing="70" />
                                             <Button HorizontalAlignment="Right" Content="Manage" Click="GoToModels_Click" Foreground="{ThemeResource AccentBrush}" Background="Transparent" BorderThickness="0" />
                                         </Grid>
                                         <Grid ColumnSpacing="13">
@@ -195,7 +188,7 @@
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <Border Width="42" Height="42" CornerRadius="12" Background="{ThemeResource AccentSoftBrush}" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1">
-                                                <TextBlock Text="Q" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentBrush}" FontSize="17" FontWeight="Bold" />
+                                                <FontIcon Glyph="&#xE950;" FontSize="19" Foreground="{ThemeResource AccentBrush}" />
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                                                 <TextBlock x:Name="ActiveModelText" Text="Choose an installed model" Style="{StaticResource CardTitleStyle}" TextTrimming="CharacterEllipsis" />
@@ -213,11 +206,11 @@
                                     </StackPanel>
                                 </Border>
 
-                                <Border Grid.Column="1" Style="{StaticResource CardStyle}" MinHeight="242">
+                                <Border x:Name="OverviewGpuCard" Grid.Column="1" Style="{StaticResource CardStyle}" MinHeight="242">
                                     <StackPanel Spacing="17">
                                         <Grid>
                                             <TextBlock Text="GPU &amp; MEMORY" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="100" />
-                                            <TextBlock Text="LIVE · 2s" HorizontalAlignment="Right" Foreground="{ThemeResource AccentBrush}" FontSize="9" />
+                                            <TextBlock Text="Hardware telemetry" HorizontalAlignment="Right" Foreground="{ThemeResource MutedTextBrush}" FontSize="11" />
                                         </Grid>
                                         <StackPanel Spacing="5">
                                             <TextBlock x:Name="GpuName" Text="Waiting for GPU" Style="{StaticResource CardTitleStyle}" TextTrimming="CharacterEllipsis" />
@@ -237,10 +230,10 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                 <Border x:Name="VramCard" Style="{StaticResource CompactCardStyle}">
-                                    <StackPanel Spacing="8"><TextBlock Text="MODEL STATUS" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="90" /><TextBlock Text="Ready for requests" Style="{StaticResource CardTitleStyle}" /><TextBlock Text="The local API can cold-load the selected model on first use." Style="{StaticResource CaptionStyle}" /></StackPanel>
+                                    <StackPanel Spacing="8"><TextBlock Text="RUNNING SESSION" Style="{StaticResource CaptionStyle}" FontSize="11" CharacterSpacing="70" /><TextBlock x:Name="RunningSessionText" Text="No model loaded" Style="{StaticResource CardTitleStyle}" TextWrapping="Wrap" /><TextBlock x:Name="RunningSessionDetailText" Text="The local API loads a model on its first request." Style="{StaticResource CaptionStyle}" /></StackPanel>
                                 </Border>
                                 <Border x:Name="ContextCard" Grid.Column="1" Style="{StaticResource CompactCardStyle}">
-                                    <StackPanel Spacing="6"><Grid><TextBlock Text="CONTEXT" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="90" /><TextBlock x:Name="ContextRingText" Text="—" HorizontalAlignment="Right" Style="{StaticResource MetricValueStyle}" /></Grid><TextBlock x:Name="ContextValue" Text="Choose a model" Style="{StaticResource MutedStyle}" FontSize="11" /><TextBlock x:Name="KvValue" Text="KV profile unavailable" Style="{StaticResource CaptionStyle}" /></StackPanel>
+                                    <StackPanel Spacing="6"><Grid><TextBlock Text="SAVED CONTEXT LIMIT" Style="{StaticResource CaptionStyle}" FontSize="11" CharacterSpacing="60" /><TextBlock x:Name="ContextRingText" Text="—" HorizontalAlignment="Right" Style="{StaticResource MetricValueStyle}" /></Grid><TextBlock x:Name="ContextValue" Text="Choose a model" Style="{StaticResource MutedStyle}" FontSize="12" /><TextBlock x:Name="KvValue" Text="KV profile unavailable" Style="{StaticResource CaptionStyle}" /></StackPanel>
                                 </Border>
                                 <Border x:Name="SpeedCard" Grid.Column="2" Style="{StaticResource CompactCardStyle}">
                                     <StackPanel Spacing="6"><Grid><TextBlock Text="DECODE" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="90" /><TextBlock x:Name="SpeedRingText" Text="—" HorizontalAlignment="Right" Style="{StaticResource MetricValueStyle}" /></Grid><ProgressBar x:Name="SpeedRing" Height="5" Minimum="0" Maximum="100" Value="0" /><TextBlock x:Name="SpeedValue" Text="No completed requests" Style="{StaticResource CaptionStyle}" /></StackPanel>
@@ -269,12 +262,13 @@
                                 <StackPanel Spacing="5">
                                     <TextBlock Text="MODEL LIBRARY" Style="{StaticResource EyebrowStyle}" />
                                     <TextBlock Text="Models" Style="{StaticResource PageTitleStyle}" />
-                                    <TextBlock Text="Local artifacts and linked files are discovered without loading GPU memory." Style="{StaticResource MutedStyle}" />
+                                    <TextBlock Text="Every installed model is exposed through /v1/models. Requests select an API name and only that model is loaded into VRAM." Style="{StaticResource MutedStyle}" TextWrapping="Wrap" />
                                 </StackPanel>
-                                <Button x:Name="AddModelButton" Grid.Column="1" Content="Link a model" Click="AddModel_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" VerticalAlignment="Bottom" />
+                                <Button x:Name="AddModelButton" Grid.Column="1" Content="Link external file" Click="AddModel_Click" VerticalAlignment="Bottom" />
                                 <Button x:Name="RefreshModelsButton" Grid.Column="2" Content="Refresh" Click="RefreshModels_Click" VerticalAlignment="Bottom" />
                             </Grid>
                             <InfoBar x:Name="ModelsInfo" IsOpen="False" IsClosable="True" />
+                            <Border Style="{StaticResource CompactCardStyle}" Background="{ThemeResource SurfaceAltBrush}"><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="3"><TextBlock Text="Your Models folder" Style="{StaticResource CardTitleStyle}" /><TextBlock Text="Add a .ninfer file here, then refresh. External files stay in their original location." Style="{StaticResource CaptionStyle}" /></StackPanel><Button Grid.Column="1" Content="Open Models folder" Click="OpenModelsFolder_Click" VerticalAlignment="Center" /></Grid></Border>
                             <Border x:Name="ModelsEmptyState" Style="{StaticResource CardStyle}" Visibility="Collapsed" Padding="28">
                                 <StackPanel HorizontalAlignment="Center" Spacing="9" MaxWidth="520">
                                     <TextBlock Text="No models linked yet" Style="{StaticResource SectionTitleStyle}" HorizontalAlignment="Center" />
@@ -289,22 +283,33 @@
                                 <ListView.ItemTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource CardStyle}" Padding="18">
-                                            <Grid ColumnSpacing="16" RowSpacing="13">
+                                            <Grid ColumnSpacing="16" RowSpacing="13" SizeChanged="ModelCardGrid_SizeChanged">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="46" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                                 <Border Width="42" Height="42" CornerRadius="12" Background="{ThemeResource AccentSoftBrush}" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1">
                                                     <TextBlock Text="N" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentBrush}" FontWeight="Bold" />
                                                 </Border>
                                                 <StackPanel Grid.Column="1" Spacing="4">
-                                                    <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitleStyle}" TextTrimming="CharacterEllipsis" /><Border Style="{StaticResource PillStyle}"><TextBlock Text="{Binding StateLabel}" FontSize="9" FontWeight="SemiBold" /></Border></StackPanel>
+                                                    <TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitleStyle}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding DisplayName}" />
+                                                    <TextBlock Text="{Binding StateLabel}" FontSize="11" Foreground="{ThemeResource AccentBrush}" />
                                                     <TextBlock Text="{Binding Repository}" Style="{StaticResource CaptionStyle}" />
+                                                    <TextBlock Text="{Binding OriginText}" Style="{StaticResource CaptionStyle}" />
+                                                    <TextBlock Text="{Binding PresetText}" Style="{StaticResource CaptionStyle}" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="API" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding ApiName}" FontFamily="Consolas" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="430" /></StackPanel>
                                                     <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="{Binding Weights}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding SizeText}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="VISION" Foreground="{ThemeResource AccentBrush}" FontSize="10" Visibility="{Binding VisionVisibility}" /></StackPanel>
                                                 </StackPanel>
-                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
-                                                    <Button Content="Use" Click="Activate_Click" Tag="{Binding FileName}" Visibility="{Binding ActivateVisibility}" Style="{StaticResource ManagerPrimaryButtonStyle}" />
-                                                    <Button Content="•••">
+                                                <StackPanel Grid.Column="2" Tag="card-actions" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                                    <Button Click="EditModelApiName_Click" Tag="{Binding FileName}" Visibility="{Binding InstalledVisibility}" ToolTipService.ToolTip="Edit API model name" AutomationProperties.Name="Edit API model name"><FontIcon Glyph="&#xE70F;" FontSize="13" /></Button>
+                                                    <Button Content="Locate file" Click="RelinkModel_Click" Tag="{Binding FileName}" Visibility="{Binding MissingVisibility}" Style="{StaticResource ManagerPrimaryButtonStyle}" />
+                                                    <Button Content="Set default" Click="Activate_Click" Tag="{Binding FileName}" Visibility="{Binding ActivateVisibility}" Style="{StaticResource ManagerPrimaryButtonStyle}" />
+                                                    <Button Content="•••" AutomationProperties.Name="More model actions" ToolTipService.ToolTip="Verify or remove this model">
                                                         <Button.Flyout>
                                                             <MenuFlyout>
-                                                                <MenuFlyoutItem Text="Verify integrity" Click="Verify_Click" Tag="{Binding FileName}" />
+                                                                <MenuFlyoutItem Text="Mark as seen" Click="MarkModelSeen_Click" Tag="{Binding FileName}" Visibility="{Binding NewVisibility}" />
+                                                                <MenuFlyoutItem Text="Import model settings…" Click="ImportPreset_Click" Tag="{Binding FileName}" Visibility="{Binding InstalledVisibility}" />
+                                                                <MenuFlyoutItem Text="Export model preset…" Click="ExportPreset_Click" Tag="{Binding FileName}" Visibility="{Binding InstalledVisibility}" />
+                                                                <MenuFlyoutSeparator />
+                                                                <MenuFlyoutItem Text="Verify integrity" Click="Verify_Click" Tag="{Binding FileName}" Visibility="{Binding VerifyVisibility}" />
                                                                 <MenuFlyoutItem Text="Remove from manager" Click="Delete_Click" Tag="{Binding FileName}" />
                                                             </MenuFlyout>
                                                         </Button.Flyout>
@@ -318,7 +323,7 @@
                             <Border Height="1" Background="{ThemeResource BorderSoftBrush}" Margin="0,8" />
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <StackPanel Spacing="4"><TextBlock Text="RECOMMENDED" Style="{StaticResource EyebrowStyle}" /><TextBlock Text="Ready-to-use NInfer models" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="Profiles are selected automatically for your model, engine and available VRAM." Style="{StaticResource MutedStyle}" /></StackPanel>
+                                <StackPanel Spacing="4"><TextBlock Text="RECOMMENDED" Style="{StaticResource EyebrowStyle}" /><TextBlock Text="Ready-to-use NInfer models" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="Includes a recommended starting profile. Actual memory fit depends on your GPU, context and acceleration settings." Style="{StaticResource MutedStyle}" /></StackPanel>
                                 <Button Grid.Column="1" Content="Check for new models" Click="RefreshModels_Click" VerticalAlignment="Bottom" />
                             </Grid>
                             <ListView ItemsSource="{x:Bind RecommendedModels}" SelectionMode="None" IsItemClickEnabled="False">
@@ -326,15 +331,15 @@
                                 <ListView.ItemTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource CardStyle}" Padding="18">
-                                            <Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                                <StackPanel Spacing="5"><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitleStyle}" /><Border Style="{StaticResource PillStyle}" Visibility="{Binding NewVisibility}"><TextBlock Text="NEW" Foreground="{ThemeResource AccentBrush}" FontSize="9" FontWeight="SemiBold" /></Border><Border Style="{StaticResource PillStyle}" Visibility="{Binding InstalledVisibility}"><TextBlock Text="INSTALLED" FontSize="9" /></Border></StackPanel><TextBlock Text="{Binding Weights}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding SizeText}" Style="{StaticResource CaptionStyle}" /></StackPanel>
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Content="View on Hugging Face" Click="OpenModelCard_Click" Tag="{Binding ModelCardUrl}" /><Button Content="Download" Click="DownloadModel_Click" Tag="{Binding FileName}" Visibility="{Binding DownloadVisibility}" Style="{StaticResource ManagerPrimaryButtonStyle}" /></StackPanel>
+                                            <Grid ColumnSpacing="16" RowSpacing="12" SizeChanged="RecommendationCardGrid_SizeChanged"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                                <StackPanel Spacing="5"><TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitleStyle}" TextWrapping="Wrap" /><StackPanel Orientation="Horizontal" Spacing="8"><Border Style="{StaticResource PillStyle}" Visibility="{Binding NewVisibility}"><TextBlock Text="NEW" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" /></Border><Border Style="{StaticResource PillStyle}" Visibility="{Binding InstalledVisibility}"><TextBlock Text="INSTALLED" FontSize="11" /></Border></StackPanel><TextBlock Text="{Binding Weights}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding SizeText}" Style="{StaticResource CaptionStyle}" /></StackPanel>
+                                                <StackPanel Grid.Column="1" Tag="card-actions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Content="Hugging Face" Click="OpenModelCard_Click" Tag="{Binding ModelCardUrl}" /><Button Content="Download" Click="DownloadModel_Click" Tag="{Binding FileName}" Visibility="{Binding DownloadVisibility}" Style="{StaticResource ManagerPrimaryButtonStyle}" /><Button Content="•••" Visibility="{Binding NewVisibility}" ToolTipService.ToolTip="New model actions" AutomationProperties.Name="New model actions"><Button.Flyout><MenuFlyout><MenuFlyoutItem Text="Mark as seen" Click="MarkModelSeen_Click" Tag="{Binding FileName}" /></MenuFlyout></Button.Flyout></Button></StackPanel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>
-                            <Border x:Name="ModelDownloadPanel" Style="{StaticResource CardStyle}" Visibility="Collapsed"><StackPanel Spacing="7"><ProgressBar x:Name="ModelDownloadProgressBar" Minimum="0" Maximum="100" /><Grid><TextBlock x:Name="ModelDownloadProgressText" Style="{StaticResource CaptionStyle}" /><Button Content="Pause" Click="CancelModelDownload_Click" HorizontalAlignment="Right" /></Grid></StackPanel></Border>
+                            <Border x:Name="ModelDownloadPanel" Style="{StaticResource CardStyle}" Visibility="Collapsed"><StackPanel Spacing="7"><ProgressBar x:Name="ModelDownloadProgressBar" Minimum="0" Maximum="100" /><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock x:Name="ModelDownloadProgressText" Style="{StaticResource CaptionStyle}" /><Button Grid.Column="1" Content="Pause" Click="CancelModelDownload_Click" /></Grid></StackPanel></Border>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -354,7 +359,7 @@
                                 <Border x:Name="TokensCard" Grid.Column="3" Style="{StaticResource CompactCardStyle}"><StackPanel Spacing="4"><TextBlock Text="OUTPUT TOKENS" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="90" /><TextBlock x:Name="TotalTokensValue" Text="0" Style="{StaticResource MetricValueStyle}" /></StackPanel></Border>
                             </Grid>
                             <Border Style="{StaticResource CardStyle}" Padding="0" Clip="{x:Null}">
-                                <StackPanel>
+                                <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled"><StackPanel MinWidth="780">
                                     <Grid Padding="17,12" Background="{ThemeResource SurfaceAltBrush}" ColumnSpacing="12">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition Width="100" /><ColumnDefinition Width="100" /><ColumnDefinition Width="*" /><ColumnDefinition Width="90" /><ColumnDefinition Width="90" /><ColumnDefinition Width="90" /></Grid.ColumnDefinitions>
                                         <TextBlock Text="STARTED" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock Grid.Column="1" Text="STATUS" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock Grid.Column="2" Text="TYPE" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock Grid.Column="3" Text="TOKENS" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock Grid.Column="4" Text="TTFT" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock Grid.Column="5" Text="PREFILL" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock Grid.Column="6" Text="DECODE" Style="{StaticResource CaptionStyle}" FontSize="9" />
@@ -370,7 +375,7 @@
                                             </DataTemplate>
                                         </ListView.ItemTemplate>
                                     </ListView>
-                                </StackPanel>
+                                </StackPanel></ScrollViewer>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
@@ -402,17 +407,18 @@
 
                     <ScrollViewer x:Name="EnginePage" Visibility="Collapsed">
                         <StackPanel Padding="34,30,34,60" Spacing="15" MaxWidth="1200" HorizontalAlignment="Stretch">
-                            <Grid ColumnSpacing="12">
+                            <Grid x:Name="EngineHeaderGrid" ColumnSpacing="12" RowSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                 <StackPanel Spacing="5"><TextBlock Text="RUNTIME" Style="{StaticResource EyebrowStyle}" /><TextBlock Text="Engine" Style="{StaticResource PageTitleStyle}" /><TextBlock Text="Installed NInfer runtime, hardware compatibility and lifecycle." Style="{StaticResource MutedStyle}" /></StackPanel>
-                                <Button Grid.Column="1" Content="Check for updates" Click="CheckUpdate_Click" VerticalAlignment="Bottom" />
+                                <Button x:Name="EngineUpdateCheckButton" Grid.Column="1" Content="Check for updates" Click="CheckUpdate_Click" VerticalAlignment="Bottom" />
                                 <Button x:Name="EnginePagePrimaryButton" Grid.Column="2" Content="Load model" Click="EnginePrimary_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" VerticalAlignment="Bottom" />
                             </Grid>
                             <Border Style="{StaticResource CardStyle}" Padding="24">
                                 <Grid ColumnSpacing="17">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="62" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                    <Border Width="58" Height="58" CornerRadius="17" Background="{ThemeResource AccentBrush}"><TextBlock Text="N" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF071410" FontSize="24" FontWeight="Bold" /></Border>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4"><Border Style="{StaticResource PillStyle}" HorizontalAlignment="Left"><TextBlock Text="INSTALLED" FontSize="9" /></Border><TextBlock Text="NInferEZ Engine" Style="{StaticResource SectionTitleStyle}" /><TextBlock x:Name="EngineCompatibilityText" Text="NInfer All compatible · Windows x64" Style="{StaticResource CaptionStyle}" /><StackPanel x:Name="EnginePublisherSignature" Orientation="Horizontal" Spacing="6"><TextBlock Text="By" Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" FontSize="8" /><Image x:Name="EnginePublisherLogo" Width="58" Height="24" Stretch="Uniform" AutomationProperties.Name="2beng2" /></StackPanel></StackPanel>
+                                    <Image x:Name="EngineLogo" Width="58" Height="58" AutomationProperties.Name="NInferEZ" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4"><Border Style="{StaticResource PillStyle}" HorizontalAlignment="Left"><TextBlock x:Name="EnginePackageStateText" Text="CHECKING PACKAGE" FontSize="11" /></Border><TextBlock Text="NInferEZ Engine" Style="{StaticResource SectionTitleStyle}" /><TextBlock x:Name="EngineCompatibilityText" Text="NInfer All compatible · Windows x64" Style="{StaticResource CaptionStyle}" /><StackPanel x:Name="EnginePublisherSignature" Orientation="Horizontal" Spacing="6"><TextBlock Text="By" Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" FontSize="11" /><Image x:Name="EnginePublisherLogo" Width="62" Height="28" Stretch="Uniform" AutomationProperties.Name="2beng2" /></StackPanel></StackPanel>
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"><TextBlock Text="APPLICATION VERSION" Style="{StaticResource CaptionStyle}" FontSize="9" /><TextBlock x:Name="AboutVersionText" Text="NInferEZ Manager" Style="{StaticResource MetricValueStyle}" FontSize="17" /><TextBlock x:Name="EngineStateText" Text="Checking engine" Foreground="{ThemeResource AccentBrush}" FontSize="10" HorizontalAlignment="Right" /></StackPanel>
                                 </Grid>
                             </Border>
@@ -428,13 +434,14 @@
                                     <Button x:Name="CancelEngineOperationButton" Grid.Column="2" Content="Cancel" Click="CancelEngineOperation_Click" VerticalAlignment="Center" />
                                 </Grid>
                             </Border>
-                            <Grid ColumnSpacing="15">
+                            <Grid x:Name="EngineSupportGrid" ColumnSpacing="15" RowSpacing="15">
                                 <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-                                <Border Style="{StaticResource CardStyle}">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                <Border x:Name="EngineInstallationCard" Style="{StaticResource CardStyle}">
                                     <StackPanel Spacing="12"><TextBlock Text="INSTALLATION" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="100" /><Grid RowSpacing="12"><Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions><TextBlock Text="Engine state" Style="{StaticResource CaptionStyle}" /><TextBlock x:Name="EngineStateDetailText" Text="Unknown" HorizontalAlignment="Right" /><TextBlock Grid.Row="1" Text="Selected model" Style="{StaticResource CaptionStyle}" /><TextBlock x:Name="EngineModelText" Grid.Row="1" Text="None" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="310" /><TextBlock Grid.Row="2" Text="Detected GPU" Style="{StaticResource CaptionStyle}" /><TextBlock x:Name="EngineGpuText" Grid.Row="2" Text="Detecting" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="310" /><TextBlock Grid.Row="3" Text="Public API" Style="{StaticResource CaptionStyle}" /><TextBlock x:Name="EngineApiText" Grid.Row="3" Text="127.0.0.1:8173" HorizontalAlignment="Right" /></Grid><Button Content="Open setup assistant" Click="SetupWizard_Click" /></StackPanel>
                                 </Border>
-                                <Border Grid.Column="1" Style="{StaticResource CardStyle}">
-                                    <StackPanel Spacing="12"><TextBlock Text="CAPABILITIES" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="100" /><Grid ColumnSpacing="8" RowSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions><Border Style="{StaticResource PillStyle}"><TextBlock Text="✓ NInfer v3" /></Border><Border Grid.Column="1" Style="{StaticResource PillStyle}"><TextBlock Text="✓ DFlash2" /></Border><Border Grid.Row="1" Style="{StaticResource PillStyle}"><TextBlock Text="✓ MTP" /></Border><Border Grid.Row="1" Grid.Column="1" Style="{StaticResource PillStyle}"><TextBlock Text="✓ NVFP4" /></Border><Border Grid.Row="2" Style="{StaticResource PillStyle}"><TextBlock Text="✓ Vision" /></Border><Border Grid.Row="2" Grid.Column="1" Style="{StaticResource PillStyle}"><TextBlock Text="✓ Long context" /></Border></Grid><TextBlock Text="Capabilities shown here come from the installed engine package and selected model profile." Style="{StaticResource CaptionStyle}" /></StackPanel>
+                                <Border x:Name="EngineSupportCard" Grid.Column="1" Style="{StaticResource CardStyle}">
+                                    <StackPanel Spacing="12"><TextBlock Text="MODEL &amp; HARDWARE SUPPORT" Style="{StaticResource CaptionStyle}" FontSize="11" CharacterSpacing="70" /><TextBlock x:Name="EngineModelSupportText" Text="Choose a model to view its reported capabilities." Style="{StaticResource CardTitleStyle}" TextWrapping="Wrap" /><TextBlock x:Name="EngineHardwareSupportText" Text="Select an engine matched to your GPU architecture." Style="{StaticResource MutedStyle}" /><TextBlock Text="A feature must be supported by the model artifact, engine build and GPU together. A successful build is not a real-device qualification." Style="{StaticResource CaptionStyle}" /></StackPanel>
                                 </Border>
                             </Grid>
                             <Border Style="{StaticResource CardStyle}">
@@ -477,24 +484,24 @@
                                         <Border Style="{StaticResource CardStyle}">
                                             <StackPanel Spacing="15">
                                                 <StackPanel Spacing="5"><TextBlock Text="Inference profile" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="Quality, context and acceleration settings for the selected model." Style="{StaticResource CaptionStyle}" /></StackPanel>
-                                                <StackPanel Spacing="5"><TextBlock Text="API model name" Style="{StaticResource CaptionStyle}" /><TextBox x:Name="ModelApiNameBox" PlaceholderText="Keep the model's original API name" /><TextBlock Text="Clients use this value in the model field. Leave it unchanged to keep the default name." Style="{StaticResource CaptionStyle}" /></StackPanel>
                                                 <Border Height="1" Background="{ThemeResource BorderSoftBrush}" />
-                                                <CheckBox x:Name="AutoContextBox" Content="Automatically choose the highest safe context up to 512K" />
+                                                <CheckBox x:Name="AutoContextBox" Content="Estimate context for available VRAM" />
+                                                <TextBlock Text="Auto uses the calibrated model profile and keeps a memory reserve. For an unknown artifact, turn Auto off and choose a conservative explicit limit. It does not change KV precision or weights." Style="{StaticResource CaptionStyle}" />
                                                 <Grid ColumnSpacing="12" RowSpacing="12">
                                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                                                     <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                                                     <StackPanel Spacing="5"><TextBlock Text="Maximum context" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="ContextBox" Minimum="1024" Maximum="524288" SpinButtonPlacementMode="Compact" /></StackPanel>
                                                     <StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="Prefill chunk" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="PrefillBox" Minimum="128" Maximum="65536" SpinButtonPlacementMode="Compact" /></StackPanel>
                                                     <StackPanel Grid.Row="1" Spacing="5"><TextBlock Text="KV precision" Style="{StaticResource CaptionStyle}" /><ComboBox x:Name="KvBox"><ComboBoxItem Content="BF16" /><ComboBoxItem Content="INT8" /><ComboBoxItem Content="FP8" /><ComboBoxItem Content="NVFP4" /><ComboBoxItem Content="K8V4" /><ComboBoxItem Content="RK8V4" /></ComboBox></StackPanel>
-                                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="5"><TextBlock Text="Speculative mode" Style="{StaticResource CaptionStyle}" /><ComboBox x:Name="SpecBox"><ComboBoxItem Content="Disabled" /><ComboBoxItem Content="MTP" /><ComboBoxItem Content="DFlash" /><ComboBoxItem Content="DFlash2" /></ComboBox></StackPanel>
+                                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="5"><TextBlock Text="Speculative mode" Style="{StaticResource CaptionStyle}" /><ComboBox x:Name="SpecBox" DisplayMemberPath="Label" SelectionChanged="SpeculativeMode_Changed" AutomationProperties.Name="Speculative mode" /><TextBlock x:Name="SpecCapabilityText" Style="{StaticResource CaptionStyle}" /></StackPanel>
                                                 </Grid>
                                                 <StackPanel x:Name="VisionCapabilityPanel" Spacing="4"><CheckBox x:Name="VisionBox" Content="Enable image input" /><TextBlock Text="Available only when both the model and engine support Vision." Style="{StaticResource CaptionStyle}" /></StackPanel>
-                                                <StackPanel Orientation="Horizontal" Spacing="9"><Button Content="Save profile" Click="SaveSettings_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" /><Button Content="Restore tested defaults" Click="RestoreProfile_Click" /></StackPanel>
+                                                <StackPanel Orientation="Horizontal" Spacing="9"><Button Content="Save profile" Click="SaveSettings_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" /><Button Content="Restore recommended defaults" Click="RestoreProfile_Click" /></StackPanel>
                                             </StackPanel>
                                         </Border>
 
                                         <Expander Header="Advanced engine controls">
-                                            <Border Style="{StaticResource CardStyle}" Margin="0,10,0,0"><StackPanel Spacing="14"><TextBlock Text="These values can affect stability, quality and memory use. Unsupported flags are not sent to the engine." Style="{StaticResource CaptionStyle}" /><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions><StackPanel Spacing="5"><TextBlock Text="Draft tokens" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="DraftBox" Minimum="1" Maximum="15" SpinButtonPlacementMode="Compact" /></StackPanel><StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="Active requests" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="ConcurrencyBox" Minimum="1" Maximum="1" Value="1" IsEnabled="False" /></StackPanel></Grid><CheckBox x:Name="CudaBox" Content="CUDA graphs" /><CheckBox x:Name="PrefixBox" Content="Prefix reuse" /><StackPanel x:Name="AdvancedProfilePanel" Spacing="12" /><Button Content="Copy generated NInfer command" Click="CopyCommand_Click" HorizontalAlignment="Left" /></StackPanel></Border>
+                                            <Border Style="{StaticResource CardStyle}" Margin="0,10,0,0"><StackPanel Spacing="14"><TextBlock Text="These launch settings can affect stability, quality and memory. Save profile above after editing. Acceleration choices follow inspected artifact components; unknown metadata is marked explicitly. KV choices still require a compatible engine and GPU." Style="{StaticResource CaptionStyle}" /><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions><StackPanel x:Name="DraftControlsPanel" Spacing="5"><TextBlock Text="Draft tokens" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="DraftBox" Minimum="1" Maximum="15" SpinButtonPlacementMode="Compact" /></StackPanel><StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="Active requests" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="ConcurrencyBox" Minimum="1" Maximum="1" Value="1" IsEnabled="False" /></StackPanel></Grid><CheckBox x:Name="CudaBox" Content="CUDA graphs" /><CheckBox x:Name="PrefixBox" Content="Prefix reuse" /><StackPanel x:Name="AdvancedProfilePanel" Spacing="12" /><Button Content="Copy default model launch command" Click="CopyCommand_Click" HorizontalAlignment="Left" /></StackPanel></Border>
                                         </Expander>
                                     </StackPanel>
                                 </StackPanel>
@@ -507,6 +514,8 @@
                                             <CheckBox x:Name="LockPortBox" Content="Require this exact port" />
                                             <PasswordBox x:Name="ApiKeyBox" Header="Optional local API key" PlaceholderText="Empty means no authentication on localhost" />
                                             <CheckBox x:Name="CorsBox" Content="Allow browser clients (CORS)" />
+                                            <CheckBox x:Name="LocalNetworkBox" Content="Allow access from the local network" />
+                                            <TextBlock Text="Off by default. Requires an API key and listens on all interfaces, including VPN. Firewall and Tailscale rules are not changed automatically." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
                                             <Button Content="Apply API changes" Click="SaveRestartPort_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" HorizontalAlignment="Left" />
                                         </StackPanel>
                                     </Border>
@@ -514,8 +523,9 @@
                                     <Border Style="{StaticResource CardStyle}">
                                         <StackPanel Spacing="14">
                                             <StackPanel Spacing="4"><TextBlock Text="Memory and startup" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="Control VRAM release and Windows integration." Style="{StaticResource CaptionStyle}" /></StackPanel>
-                                            <StackPanel Spacing="5"><TextBlock Text="Unload after idle minutes" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="IdleMinutesBox" Minimum="0.1" Maximum="1440" SmallChange="0.5" SpinButtonPlacementMode="Compact" ValueChanged="ApplicationNumberPreference_Changed" /></StackPanel>
-                                            <CheckBox x:Name="AutoUnloadBox" Content="Automatically release VRAM when idle" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />
+                                            <ComboBox x:Name="MemoryPolicyPicker" Header="Release model memory" SelectionChanged="MemoryPolicy_Changed" HorizontalAlignment="Stretch"><ComboBoxItem Content="After idle time" /><ComboBoxItem Content="After every request" /><ComboBoxItem Content="Keep the model loaded" /></ComboBox>
+                                            <StackPanel x:Name="IdleTimePanel" Spacing="5"><TextBlock Text="Idle time (minutes)" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="IdleMinutesBox" Minimum="0.1" Maximum="1440" SmallChange="0.5" SpinButtonPlacementMode="Compact" ValueChanged="ApplicationNumberPreference_Changed" /></StackPanel>
+                                            <TextBlock Text="After every request maximizes free VRAM, but the next request must cold-load the model again. The default is three idle minutes." Style="{StaticResource CaptionStyle}" />
                                             <Border Height="1" Background="{ThemeResource BorderSoftBrush}" />
                                             <CheckBox x:Name="StartWithWindowsBox" Content="Start with Windows" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />
                                             <CheckBox x:Name="StartMinimizedBox" Content="Start in the notification area" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />

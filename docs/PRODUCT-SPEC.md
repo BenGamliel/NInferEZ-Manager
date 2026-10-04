@@ -1,5 +1,7 @@
 # NInferEZ Manager — product and UX specification
 
+> Historical design baseline. The active implementation scope and acceptance evidence are maintained in [PRODUCT-PLAN.md](PRODUCT-PLAN.md) and [ACCEPTANCE-MATRIX.md](ACCEPTANCE-MATRIX.md).
+
 Status: design baseline for review  
 Date: 2026-09-28
 

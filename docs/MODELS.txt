@@ -5,4 +5,8 @@ Place supported .ninfer model artifacts in this folder. The application scans
 the folder and lists matching models automatically. You may also link an
 artifact stored elsewhere; linked artifacts are not copied.
 
+Installed Manager also scans its per-user Models folder. Use the Models
+page's Open folder action to find the writable default location. Files placed
+in the Models folder next to the installed EXE are still discovered.
+
 Model weights are not included with NInferEZ Manager.

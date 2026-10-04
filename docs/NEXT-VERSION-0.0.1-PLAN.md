@@ -1,5 +1,7 @@
 # NInferEZ Manager 0.0.1 — Product and Development Plan
 
+> Historical baseline planning record. Its completed items and build IDs describe the retained baseline, not fresh verification of this source tree. The active completion scope is [PRODUCT-PLAN.md](PRODUCT-PLAN.md), and current evidence belongs in [ACCEPTANCE-MATRIX.md](ACCEPTANCE-MATRIX.md).
+
 מסמך זה הוא תוכנית המוצר ומסמך המעקב החי של NInferEZ Manager 0.0.1. הוא מתעד גם את היעד
 וגם את מצב המימוש בפועל; סעיף 19 הוא מקור האמת להתקדמות, לבדיקות ולשלבים שעדיין פתוחים.
 

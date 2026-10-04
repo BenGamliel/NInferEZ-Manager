@@ -11,6 +11,7 @@ try
     var paths=new AppPaths();
     var settings=new SettingsService(paths);
     Assert(settings.Current.PublicPort==8173,"default port");
+    Assert(!settings.Current.AllowLocalNetwork,"local-network access is disabled by default");
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5080")=="sm120a"&&EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5090")=="sm120a","RTX 5000 Series maps to the Blackwell sm120a package");
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 4090")=="sm89","RTX 4000 Series maps to sm89");
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 3090")=="sm86","RTX 3000 Series maps to sm86");
@@ -78,7 +79,7 @@ try
     settings.Save();
     var reloaded=new SettingsService(paths);
     Assert(reloaded.Current.ActiveModelFile==model.FileName,"settings persist");
-    var log=new ManagerLog(paths);
+    using var log=new ManagerLog(paths);
     var engine=new EngineController(paths,reloaded,catalog,log);
     var engineArgs=engine.BuildArguments();
     Assert(Has(engineArgs,"--max-context","150000"),"command context");
@@ -123,20 +124,48 @@ try
     settings.Current.ModelAliases[iq.FileName]="integration-test-model";
     settings.Save();
     var apiEngine=new EngineController(paths,settings,catalog,log);
-    await using(var proxy=new PublicApiProxy(apiEngine,settings,log))
+    await using(var proxy=new PublicApiProxy(apiEngine,settings,catalog,log))
     {
         await proxy.StartAsync();
+        Assert(!proxy.LocalNetworkEnabled,"public API binds to localhost by default");
         using var client=new HttpClient(new SocketsHttpHandler{UseProxy=false});
         var healthJson=await client.GetStringAsync($"http://127.0.0.1:{apiPort}/health");
         Assert(healthJson.Contains("\"status\":\"ok\"",StringComparison.Ordinal),"public health endpoint is available before model load");
         var modelsJson=await client.GetStringAsync($"http://127.0.0.1:{apiPort}/v1/models");
         Assert(modelsJson.Contains("integration-test-model",StringComparison.Ordinal),"unloaded API returns the configured model name");
+        Assert(modelsJson.Contains("swift-1.5-qwen3.8-27b-uncensored",StringComparison.Ordinal),"unloaded API exposes every installed model");
+        using var unknownRequest=new StringContent("{\"model\":\"missing-model\",\"messages\":[]}",System.Text.Encoding.UTF8,"application/json");
+        using var unknownResponse=await client.PostAsync($"http://127.0.0.1:{apiPort}/v1/chat/completions",unknownRequest);
+        Assert((int)unknownResponse.StatusCode==404,"unknown API model is rejected before loading the engine");
         using var preflight=new HttpRequestMessage(HttpMethod.Options,$"http://127.0.0.1:{apiPort}/v1/chat/completions");
         using var preflightResponse=await client.SendAsync(preflight);
         Assert((int)preflightResponse.StatusCode==204&&preflightResponse.Headers.TryGetValues("Access-Control-Allow-Origin",out var origins)&&origins.Contains("*"),"CORS preflight works when enabled");
         Assert(apiEngine.State==EngineState.Unloaded,"GET /v1/models does not load the engine or allocate GPU memory");
     }
-    Console.WriteLine("All backend contract and command-generation checks passed. No model was loaded.");
+    var lanApiPort=Enumerable.Range(apiPort+1,100).First(PortService.IsAvailable);
+    settings.Current.PublicPort=lanApiPort;
+    settings.Current.AllowLocalNetwork=true;
+    settings.Current.ApiKey="host-only-lan-test-key";
+    settings.Save();
+    await using(var lanProxy=new PublicApiProxy(apiEngine,settings,catalog,log))
+    {
+        await lanProxy.StartAsync();
+        Assert(lanProxy.LocalNetworkEnabled,"public API can bind to all local-network interfaces when explicitly enabled");
+        using var client=new HttpClient(new SocketsHttpHandler{UseProxy=false});
+        var healthJson=await client.GetStringAsync($"http://127.0.0.1:{lanApiPort}/health");
+        Assert(healthJson.Contains("\"status\":\"ok\"",StringComparison.Ordinal),"local API remains reachable when local-network access is enabled");
+    }
+    var valid=settings.Snapshot();
+    var patchChanges=System.Text.Json.JsonSerializer.SerializeToElement(new {idleMinutes=0d},SettingsService.JsonOptions);
+    var patched=settings.Patch(new(valid.Revision,patchChanges));
+    Assert(patched.IdleMinutes==0,"immediate after-request memory policy is valid");
+    try{settings.Patch(new(valid.Revision,patchChanges));throw new Exception("stale patch unexpectedly succeeded");}catch(InvalidOperationException){Assert(true,"stale settings patch is rejected");}
+    Assert(!catalog.IsExternal(catalog.Find(discovered.FileName)!),"Models discovery does not create external links");
+    Assert(GpuMonitor.Parse("0, GPU-one, NVIDIA GeForce RTX 5090, 1000, 32000, N/A, N/A\n1, GPU-two, NVIDIA GeForce RTX 4090, 2000, 24000, 2, 31").Count==2,"GPU parsing supports multiple devices and unavailable telemetry");
+    try{EngineController.RecommendContext(iq,new("tiny",0,1024,0,0));throw new Exception("no-fit context unexpectedly succeeded");}catch(InvalidOperationException){Assert(true,"no-fit automatic context fails explicitly");}
+    Assert(!catalog.FindInstalledByApiName(" Integration-test-model ")?.FileName.Equals(iq.FileName,StringComparison.OrdinalIgnoreCase)??true,"API model routing requires the canonical identifier");
+    await RegressionChecks.RunAsync(paths,settings,catalog,log,Assert);
+    Console.WriteLine($"All {CheckCount.Count} backend contract, file I/O and fake-engine checks passed. No real model or GPU inference was loaded.");
 }
 finally
 {
@@ -146,4 +175,5 @@ finally
     Environment.SetEnvironmentVariable("NINFEREZ_MANAGER_ENGINE_ROOT",null);
 }
 static bool Has(IReadOnlyList<string> values,string name,string value){for(var i=0;i<values.Count-1;i++)if(values[i]==name&&values[i+1]==value)return true;return false;}
-static void Assert(bool ok,string name){if(!ok)throw new InvalidOperationException("FAILED: "+name);Console.WriteLine("PASS: "+name);}
+static void Assert(bool ok,string name){if(!ok)throw new InvalidOperationException("FAILED: "+name);CheckCount.Count++;Console.WriteLine("PASS: "+name);}
+static class CheckCount{public static int Count;}

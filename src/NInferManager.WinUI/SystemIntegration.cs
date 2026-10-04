@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -21,13 +20,6 @@ public static class SystemIntegration
     }
     public static void HideWindow(IntPtr hwnd)=>ShowWindow(hwnd,0);
     public static void ShowWindow(IntPtr hwnd){ShowWindow(hwnd,5);SetForegroundWindow(hwnd);}
-    public static void TrimWorkingSet()
-    {
-        GC.Collect(2,GCCollectionMode.Optimized,false,true);
-        using var process=Process.GetCurrentProcess();
-        _=SetProcessWorkingSetSize(process.Handle,new IntPtr(-1),new IntPtr(-1));
-    }
     [DllImport("user32.dll")]private static extern bool ShowWindow(IntPtr hwnd,int command);
     [DllImport("user32.dll")]private static extern bool SetForegroundWindow(IntPtr hwnd);
-    [DllImport("kernel32.dll")]private static extern bool SetProcessWorkingSetSize(IntPtr process,IntPtr minimum,IntPtr maximum);
 }

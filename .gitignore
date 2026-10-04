@@ -5,6 +5,7 @@ build/
 dist/
 artifacts/
 cache/
+.nuget/
 
 # Local runtime data and large payloads
 Data/
@@ -12,6 +13,8 @@ Models/
 Engine/
 runtime/
 *.ninfer
+*.gguf
+*.safetensors
 *.part
 *.partial
 
