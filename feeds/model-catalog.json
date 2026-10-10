@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "product": "NInferEZ Model Catalog",
-  "revision": 1,
-  "updatedAt": "2026-09-28T00:00:00Z",
+  "revision": 2,
+  "updatedAt": "2026-10-10T14:13:21Z",
   "models": [
     {
       "displayName": "Swift 1.5 Qwen3.8-27B Uncensored NVFP4",
@@ -55,6 +55,31 @@
       "recommendedMtpAttentionWindow": 8192,
       "featured": true,
       "newUntilUtc": "2026-11-01T00:00:00Z"
+    },
+    {
+      "displayName": "Heretic Qwen3.8-27B Uncensored IQ2_XS",
+      "repository": "2beng2/Qwen3.8-27B-Heretic-GSQ-RCO-IQ2_XS-NInfer",
+      "revision": "964f4e24ca1fb469d793e4f5893eefbcfce3a025",
+      "fileName": "heretic-iq2-xs.ninfer",
+      "modelId": "qwen3.8-27b-heretic-iq2-xs",
+      "weights": "GSQ-RCO IQ2_XS",
+      "sizeBytes": 8419682816,
+      "sha256": "a11f6272a382e761a5353cbc9fca41a5708c9391d3e757fc64e9ed19baf63e07",
+      "vision": false,
+      "artifactVersion": 3,
+      "recommendedContext": 32768,
+      "recommendedMaxTokens": 8192,
+      "nativeContext": 262144,
+      "maximumContext": 262144,
+      "baseVramMiB": 0,
+      "kvMiBPerKToken": 0,
+      "recommendedKvPrecision": "Rk8v4",
+      "recommendedSpeculativeMode": "Disabled",
+      "recommendedDraftTokens": 1,
+      "recommendedLmHeadDraft": false,
+      "recommendedPrefillChunk": 2048,
+      "featured": true,
+      "newUntilUtc": "2026-11-10T00:00:00Z"
     }
   ]
 }
