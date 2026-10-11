@@ -28,6 +28,7 @@ UninstallDisplayIcon={app}\NInferEZ Manager.exe
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+LicenseFile={#PayloadRoot}\Docs\COMPONENT-TERMS.txt
 CloseApplications=yes
 RestartApplications=no
 VersionInfoVersion={#AppVersion}

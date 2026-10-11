@@ -16,6 +16,17 @@ Run local NInfer models on Windows from a desktop application. Manage models, GP
 
 Windows x64. The application and CPU conversion runtime are included; engine packages and model weights are downloaded separately. Public packages contain no personal settings or model weights. Releases are currently unsigned, so Windows may display a publisher warning.
 
+## Component terms
+
+Manager source remains MIT. The bundled Microsoft Windows App SDK retains its
+[complete component terms](docs/COMPONENT-TERMS.txt) and
+[original supplier notices](docs/licenses/WindowsAppSDK-2.5.1-NOTICE.txt).
+By downloading, using or redistributing the Microsoft code in either package,
+you agree to those component terms; if you do not agree, do not use that code.
+The installer presents the same agreement. Other open-source components retain
+their own license rights. Model license copies are included under
+`Docs/model-licenses` and on the [license page](https://ninferez.pages.dev/licenses/#models).
+
 ## Getting started
 
 1. Install Manager or extract the Portable ZIP. Do not run an executable inside an archive.

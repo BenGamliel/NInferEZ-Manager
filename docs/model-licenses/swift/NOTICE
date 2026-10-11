@@ -1,0 +1,49 @@
+Swift 1.5 Qwen3.8-27B
+Copyright 2026 UkisAI
+
+UkisAI's contribution (the "Swift Contribution") is licensed under the
+Swift Open License v1.0. See LICENSE.
+
+This model is a Derivative Work of Qwen3.8-27B
+  https://huggingface.co/Qwen/Qwen3.8-27B
+  Copyright 2026 Alibaba Cloud
+  Licensed under the Apache License, Version 2.0. See LICENSE-APACHE-2.0.
+
+Swift 1.5 continues UkisAI's Swift 1.0 model, itself a Qwen3.8-27B
+derivative. The full release incorporates the Qwen3.8-27B Base Model and
+UkisAI's Swift 1.0 and Swift 1.5 contributions.
+
+Changes made by UkisAI (Apache License 2.0, Section 4(b) change notice):
+  - model-*.safetensors, model.safetensors.index.json: the model weights from
+    Swift 1.0 were further adapted by UkisAI using additional post-training
+    methods.
+  - README.md: replaced. LICENSE and NOTICE added.
+  - All other files (config.json, generation_config.json, chat_template.jinja,
+    tokenizer.json, tokenizer_config.json, vocab.json, merges.txt,
+    preprocessor_config.json, video_preprocessor_config.json) are retained from
+    the parent model and remain available under Apache License, Version 2.0.
+
+----------------------------------------------------------------------------
+Additional notices for this NInfer conversion (2026):
+
+  - ajgazin/Swift-1.5-Qwen3.8-27B-Uncensored-MTP applied the OrcaRouter
+    refusal direction to UkisAI's Swift 1.5 model and retained the MTP and
+    vision components. The direction originated with
+    orcarouter/Qwen3.8-27B-Uncensored.
+  - ajgazin/Swift-1.5-Qwen3.8-27B-Uncensored-NVFP4 quantized that derivative
+    with NVIDIA ModelOpt. Source revision:
+    e4899aa5eb4d138aeefd41ad54da7c5a12a9560f.
+  - CaptainArni/Swift-1.5-Qwen3.8-27B-NInfer supplied the NInfer conversion
+    recipe used as the basis for this conversion. Recipe revision:
+    133a3cb40146dbbf7a51e9f1d54d012c9c482cfd.
+  - The included DFlash2 draft is z-lab/Qwen3.8-27B-DFlash2, a mirror of
+    Inco AI's release, under Apache License 2.0. Source revision:
+    50307d4c4cde6860d4eee73e2547cd786fe8e8a4.
+  - 2beng2 converted and packaged the above into a single NInfer v3 artifact
+    with text, vision, MTP, and DFlash2 components; README.md was replaced;
+    LICENSE, LICENSE-APACHE-2.0, and this NOTICE were added. This is an
+    independent release, not an official upstream model or runtime release.
+
+The Swift Open License v1.0 continues to apply to the Swift contribution.
+The Apache 2.0 terms and upstream notices continue to apply to the Qwen base
+and DFlash2 components. This NOTICE does not modify those licenses.

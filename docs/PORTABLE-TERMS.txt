@@ -1,0 +1,10 @@
+NInferEZ Manager 1.0.0 - Portable component terms
+
+Before using the bundled Microsoft Windows App SDK code, read and agree to
+Docs/COMPONENT-TERMS.txt. If you do not agree, do not use the Microsoft code
+in this package. Manager source remains MIT; other components keep their own
+licenses. Retain Docs/licenses and Converter/licenses with the application.
+Model license copies are provided in Docs/model-licenses. Keep the appropriate
+license bundle with each downloaded or redistributed model.
+
+Full terms and notices: https://ninferez.pages.dev/licenses/#manager

@@ -1,0 +1,46 @@
+Qwen3.8-27B OrcaRouter GSQ-RCO IQ3_XXS - NInfer conversion
+
+This repository contains deployment-format conversions derived from:
+
+  Qwen/Qwen3.8-27B
+  Copyright Alibaba Cloud and the Qwen team
+  https://huggingface.co/Qwen/Qwen3.8-27B
+
+  orcarouter/Qwen3.8-27B-Uncensored
+  Refusal-reduced derivative of Qwen3.8-27B
+  https://huggingface.co/orcarouter/Qwen3.8-27B-Uncensored
+
+  RentedNoodle/Qwen3.8-27B-OrcaRouter-GSQ-RCO-IQ3_XXS-Uncensored
+  Direct IQ3_XXS source, custom importance matrix, S1-trained MTP head,
+  Froggeric template integration, and source evaluation
+  https://huggingface.co/RentedNoodle/Qwen3.8-27B-OrcaRouter-GSQ-RCO-IQ3_XXS-Uncensored
+
+The direct source applies the GSQ/RCO per-tensor allocation published by the
+Deep Algorithms and Systems Lab, Institute of Science and Technology Austria:
+
+  GSQ: Highly-Accurate Low-Precision Scalar Quantization for LLMs via
+  Gumbel-Softmax Sampling (Dadgarnia et al., 2026), arXiv:2604.18556
+  https://github.com/IST-DASLab/GSQ
+
+  Model Compression with Exact Budget Constraints via Riemannian Manifolds
+  (Helcig and Alistarh, 2026), arXiv:2605.00649
+  https://github.com/IST-DASLab/RCO
+
+The DFlash2-capable artifact additionally contains the Qwen3.8-27B DFlash2
+draft distributed by Z Lab as a mirror of Inco AI's release:
+
+  DFlash 2: Keep Drafting Parallel (Inco AI, 2026)
+  https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2
+
+  DFlash: Block Diffusion for Flash Speculative Decoding
+  (Chen, Liang, and Liu, ICML 2026)
+
+The embedded chat template originates from Froggeric's Qwen fixed-template
+project. The source GGUF format and IQ3_XXS type originate from llama.cpp/GGML.
+The distributed artifacts use the NInfer v3 container and runtime interface.
+
+This repository performs format conversion and packaging. It does not claim
+authorship of the upstream models, quantization methods, template, speculative
+decoder, or runtime. Apache License 2.0 applies to the distributed model
+weights and DFlash2 component. Third-party tooling remains under its respective
+license. This NOTICE does not modify any upstream license.

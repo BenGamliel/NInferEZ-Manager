@@ -1,0 +1,13 @@
+Qwen3.8-27B Heretic GSQ-RCO IQ2_XS — NInfer conversion
+
+Base model: Qwen3.8-27B, Qwen / Alibaba Cloud.
+Direct source: 0bserverx/Qwen3.8-27B-Heretic-GSQ-RCO-GGUF.
+Configuration and tokenizer: 0bserverx/Qwen3.8-27B-Heretic-Abliterated-Uncensored.
+GSQ/RCO methods belong to their respective authors.
+Runtime and native container: NInfer and iamwavecut/ninfer-all.
+GGUF encoding support: GGML / llama.cpp contributors.
+Native artifact conversion and packaging: 2beng2, 2026.
+
+Compatible GGUF blocks were transferred into a text-only NInfer v3 artifact.
+This conversion is not a new fine-tune and is not endorsed by upstream authors.
+Retain all applicable upstream copyrights, Apache-2.0 terms and notices.
