@@ -142,10 +142,10 @@ public sealed class SettingsService
         if (s.PublicPort is < 1024 or > 65535) throw new ArgumentOutOfRangeException(nameof(s.PublicPort), "Public API port must be between 1024 and 65535.");
         if (s.BackendPort is < 1024 or > 65535) throw new ArgumentOutOfRangeException(nameof(s.BackendPort), "Engine port must be between 1024 and 65535.");
         if (s.PublicPort == s.BackendPort) throw new ArgumentException("The public and internal ports must be different.");
-        if (!double.IsFinite(s.IdleMinutes) || s.IdleMinutes is < 0 or > 1440) throw new ArgumentOutOfRangeException(nameof(s.IdleMinutes));
-        if (s.CatalogCheckHours is < 1 or > 8760) throw new ArgumentOutOfRangeException(nameof(s.CatalogCheckHours));
-        if (s.EngineCheckHours is < 1 or > 8760) throw new ArgumentOutOfRangeException(nameof(s.EngineCheckHours));
-        if (s.UpdateCheckHours is < 1 or > 8760) throw new ArgumentOutOfRangeException(nameof(s.UpdateCheckHours));
+        if (!double.IsFinite(s.IdleMinutes) || s.IdleMinutes is < 0 or > 1440) throw new ArgumentException("Model idle time must be between 0 and 1440 minutes. Use 3 minutes for the recommended unload policy.");
+        if (s.CatalogCheckHours is < 1 or > 8760) throw new ArgumentException("Model catalog interval must be between 1 and 8760 hours. Use 24 for a daily check.");
+        if (s.EngineCheckHours is < 1 or > 8760) throw new ArgumentException("Engine catalog interval must be between 1 and 8760 hours. Use 24 for a daily check.");
+        if (s.UpdateCheckHours is < 1 or > 8760) throw new ArgumentException("Application update interval must be between 1 and 8760 hours. Use 24 for a daily check.");
         if (s.Profiles is null || s.ExternalModelPaths is null || s.ModelAliases is null) throw new ArgumentException("Profiles, aliases, and linked model paths must be valid objects.");
         if(s.SeenModelArtifacts is null||s.SeenModelArtifacts.Any(x=>x.Length>512))throw new ArgumentException("Seen artifact identifiers are invalid.");
         foreach(var link in s.ExternalModelPaths)
@@ -166,24 +166,62 @@ public sealed class SettingsService
     }
     public static void ValidateProfile(ModelProfile p)
     {
+            if (p.ManualAdvancedSettings is { } backup) ProfileSettingsPolicy.RestoreAdvanced(new ModelProfile(), backup);
+            p = ProfileSettingsPolicy.Effective(p);
             if (!Enum.IsDefined(p.KvPrecision) || !Enum.IsDefined(p.KvCapacityMode) || !Enum.IsDefined(p.SpeculativeMode) || !Enum.IsDefined(p.LogLevel)) throw new ArgumentException("Invalid model profile option.");
-            if (p.Device is < 0 or > 63) throw new ArgumentOutOfRangeException(nameof(p.Device));
-            if (p.NgramDraftTokens is < 0 or > 63 || p.HostCacheMiB < 0 || p.KvHeadroomMiB is < 0 or > 65536) throw new ArgumentException("Invalid drafting or memory-reserve setting.");
+            Range(p.Device, 0, 63, "CUDA device index");
+            Range(p.NgramDraftTokens, 0, 63, "Repeated-text draft tokens");
+            if (p.HostCacheMiB is int hostBudget) Range(hostBudget, 0, int.MaxValue, "Combined RAM cache (MiB)");
+            if (p.KvCapacityMode == KvCapacityMode.Auto) Range(p.KvHeadroomMiB, 0, 65536, "KV memory reserve (MiB)");
             if (p.HostCacheMiB is not null && (p.HostStateSlots != 0 || p.HostKvMiB != 0)) throw new ArgumentException("Host cache budget cannot be combined with explicit host KV or state budgets.");
-            if (p.CustomKvCapacity is < 1024 or > 1048576) throw new ArgumentOutOfRangeException(nameof(p.CustomKvCapacity));
-            if (p.MaxPendingRequests is < 0 or > 10000 || p.PendingTimeoutMs is < 1 or > 86400000 || p.MaxRequestMiB is < 1 or > 1024) throw new ArgumentException("Invalid request queue or request-size limit.");
-            if (p.MediaCacheMiB < 0 || p.MediaLiveMiB < 0 || p.MediaPreprocessThreads < 0 || p.DeviceStateSlots < 0 || p.HostStateSlots < 0 || p.HostKvMiB < 0 || p.ResponseStoreMaxRecords < 0 || p.ResponseStoreMaxMiB < 0 || p.LogStatsIntervalMs < 0 || p.MtpAttentionWindow < 0) throw new ArgumentException("Memory capacities and intervals cannot be negative.");
-            if (p.MaxPrivateContinuations < -1 || p.MaxSharedPrefixes < -1 || p.MaxLongAnchorsPerContinuation < -1 || p.MaxCacheMarkersPerRequest < -1) throw new ArgumentException("Cache limits must be -1 or nonnegative.");
-            if (p.Temperature is double temperature && (!double.IsFinite(temperature) || temperature < 0 || temperature > 10)) throw new ArgumentException("Temperature must be between 0 and 10.");
-            if (p.TopP is double topP && (!double.IsFinite(topP) || topP < 0 || topP > 1) || p.MinP is double minP && (!double.IsFinite(minP) || minP < 0 || minP > 1)) throw new ArgumentException("Probability limits must be between 0 and 1.");
-            if (p.TopK < 0 || p.DefaultThinkingBudget < 0) throw new ArgumentException("Token limits cannot be negative.");
-            if (p.PresencePenalty is double presence && !double.IsFinite(presence) || p.FrequencyPenalty is double frequency && !double.IsFinite(frequency)) throw new ArgumentException("Penalties must be finite.");
-            if (p.MaxContext is < 1024 or > 1_048_576) throw new ArgumentOutOfRangeException(nameof(p.MaxContext));
-            if (p.PrefillChunk is < 0 or > 65536) throw new ArgumentOutOfRangeException(nameof(p.PrefillChunk));
-            if (p.MaxConcurrency != 1) throw new ArgumentOutOfRangeException(nameof(p.MaxConcurrency), "NInferEZ Manager currently supports exactly one active request.");
-            if (p.DefaultMaxTokens is < 1 or > 1_048_576) throw new ArgumentOutOfRangeException(nameof(p.DefaultMaxTokens));
+            if (p.KvCapacityMode == KvCapacityMode.Custom)
+            {
+                Range(p.CustomKvCapacity, 1024, 1048576, "Custom KV capacity (tokens)");
+                if (p.CustomKvCapacity < p.MaxContext) throw new ArgumentException("Custom KV capacity is smaller than Context limit. Increase it to at least the context limit, or choose Match context.");
+            }
+            Range(p.MaxPendingRequests, 1, 10000, "Pending request limit");
+            Range(p.PendingTimeoutMs, 1, 86400000, "Pending request timeout (ms)");
+            Range(p.MaxRequestMiB, 1, 1024, "Maximum request body (MiB)");
+            if (p.VisionEnabled)
+            {
+                Range(p.MediaCacheMiB, 0, int.MaxValue, "Image cache budget (MiB)");
+                Range(p.MediaLiveMiB, 1, int.MaxValue, "Live image budget (MiB)");
+                Range(p.MediaPreprocessThreads, 0, 64, "Image processing workers");
+            }
+            Range(p.DeviceStateSlots, 0, int.MaxValue, "GPU state slots");
+            Range(p.HostStateSlots, 0, int.MaxValue, "Host state slots");
+            Range(p.HostKvMiB, 0, int.MaxValue, "RAM context cache (MiB)");
+            Range(p.ResponseStoreMaxRecords, 1, int.MaxValue, "Response history records");
+            Range(p.ResponseStoreMaxMiB, 1, int.MaxValue, "Response history memory (MiB)");
+            Range(p.LogStatsIntervalMs, 0, int.MaxValue, "Statistics interval (ms)");
+            Range(p.MtpAttentionWindow, 0, int.MaxValue, "MTP attention window (tokens)");
+            Range(p.MaxPrivateContinuations, -1, int.MaxValue, "Private continuation limit");
+            Range(p.MaxSharedPrefixes, -1, int.MaxValue, "Shared prefix limit");
+            Range(p.MaxLongAnchorsPerContinuation, -1, int.MaxValue, "Long anchor limit");
+            Range(p.MaxCacheMarkersPerRequest, -1, int.MaxValue, "Cache marker limit");
+            if (p.AlternativePrefixCache && !p.PrefixReuseEnabled) throw new ArgumentException("Alternative prefix caching needs Reuse previous prompt prefixes enabled. Enable prefix reuse or turn off alternative prefix caching.");
+            if (p.Temperature is double temperature && (!double.IsFinite(temperature) || temperature < 0 || temperature > 2)) throw new ArgumentException("Temperature must be between 0 and 2.");
+            if (p.TopP is double topP && (!double.IsFinite(topP) || topP < 0 || topP > 1)) throw new ArgumentException("Top-p must be between 0 and 1. Change this setting or leave it empty to use model defaults.");
+            if (p.MinP is double minP && (!double.IsFinite(minP) || minP < 0 || minP > 1)) throw new ArgumentException("Min-p must be between 0 and 1. Change this setting or leave it empty to use model defaults.");
+            if (p.TopK is int topK) Range(topK, 0, 20, "Top-k");
+            if (p.DefaultThinkingBudget is int thinking) Range(thinking, 0, int.MaxValue, "Thinking budget (tokens)");
+            if (p.PresencePenalty is double presence && (!double.IsFinite(presence) || presence is < -2 or > 2)) throw new ArgumentException("Presence penalty must be between -2 and 2. Change it or leave it empty to use model defaults.");
+            if (p.FrequencyPenalty is double frequency && (!double.IsFinite(frequency) || frequency is < -2 or > 2)) throw new ArgumentException("Frequency penalty must be between -2 and 2. Change it or leave it empty to use model defaults.");
+            Range(p.MaxContext, 1024, 1048576, "Context limit (tokens)");
+            Range(p.PrefillChunk, 128, 65536, "Prompt processing batch");
+            if (p.PrefillChunk % 128 != 0) throw new ArgumentException("Prompt processing batch must be a multiple of 128, such as 1024, 2048 or 4096. Use 2048 or turn on Manage advanced settings for me.");
+            if (p.MaxConcurrency != 1) throw new ArgumentException("Active requests must be 1. This Manager processes one generation at a time and queues other requests.");
+            Range(p.DefaultMaxTokens, 1, 1048576, "Default output limit (tokens)");
+            if (p.DefaultMaxTokens > p.MaxContext) throw new ArgumentException("Default output limit is larger than Context limit. Lower the output limit or turn on Manage advanced settings for me.");
             var maxDraft = p.SpeculativeMode == SpeculativeMode.Mtp ? 5 : 15;
-            if (p.SpeculativeMode != SpeculativeMode.Disabled && (p.DraftTokens < 1 || p.DraftTokens > maxDraft)) throw new ArgumentOutOfRangeException(nameof(p.DraftTokens));
+            if (p.SpeculativeMode != SpeculativeMode.Disabled) Range(p.DraftTokens, 1, maxDraft, "Draft tokens");
+            if (p.SpeculativeMode == SpeculativeMode.Mtp && p.MtpAttentionWindow > 0 && p.MtpAttentionWindow < p.DraftTokens + 1)
+                throw new ArgumentException("MTP attention window must be zero (model default) or at least Draft tokens + 1.");
+    }
+    private static void Range(int value, int min, int max, string label)
+    {
+        if (value < min || value > max)
+            throw new ArgumentException($"{label} is {value:N0}; it must be between {min:N0} and {max:N0}. Change this setting or turn on Manage advanced settings for me in Inference profile.");
     }
 }
 

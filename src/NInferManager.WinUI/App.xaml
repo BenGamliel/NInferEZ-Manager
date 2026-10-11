@@ -27,6 +27,9 @@
                     <Color x:Key="WarningColor">#FFC68A22</Color>
                     <Color x:Key="DangerColor">#FFD84E57</Color>
                     <Color x:Key="LogColor">#FF0B100F</Color>
+                    <Color x:Key="FitComfortableColor">#FF087054</Color>
+                    <Color x:Key="FitCloseColor">#FF945500</Color>
+                    <Color x:Key="FitExceedsColor">#FFB83238</Color>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="PageBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -46,6 +49,9 @@
                     <SolidColorBrush x:Key="WarningBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="DangerBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="LogBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="FitComfortableBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="FitCloseBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="FitExceedsBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="PageColor">#FF0B0F12</Color>
@@ -65,6 +71,9 @@
                     <Color x:Key="WarningColor">#FFF5C66B</Color>
                     <Color x:Key="DangerColor">#FFFF7F83</Color>
                     <Color x:Key="LogColor">#FF080C0F</Color>
+                    <Color x:Key="FitComfortableColor">#FF5CE0C0</Color>
+                    <Color x:Key="FitCloseColor">#FFF5C66B</Color>
+                    <Color x:Key="FitExceedsColor">#FFFF7F83</Color>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -85,6 +94,9 @@
             <SolidColorBrush x:Key="WarningBrush" Color="{ThemeResource WarningColor}" />
             <SolidColorBrush x:Key="DangerBrush" Color="{ThemeResource DangerColor}" />
             <SolidColorBrush x:Key="LogBrush" Color="{ThemeResource LogColor}" />
+            <SolidColorBrush x:Key="FitComfortableBrush" Color="{ThemeResource FitComfortableColor}" />
+            <SolidColorBrush x:Key="FitCloseBrush" Color="{ThemeResource FitCloseColor}" />
+            <SolidColorBrush x:Key="FitExceedsBrush" Color="{ThemeResource FitExceedsColor}" />
 
             <Style x:Key="PageTitleStyle" TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="Segoe UI Variable Display" />

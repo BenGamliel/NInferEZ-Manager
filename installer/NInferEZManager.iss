@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.0.1"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef PayloadRoot
   #define PayloadRoot "..\build\payload"
@@ -38,6 +38,7 @@ Source: "{#PayloadRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 [InstallDelete]
 Type: filesandordirs; Name: "{app}\Backend"
 Type: filesandordirs; Name: "{app}\Docs"
+Type: filesandordirs; Name: "{app}\Converter"
 
 [Icons]
 Name: "{group}\NInferEZ Manager"; Filename: "{app}\NInferEZ Manager.exe"; WorkingDir: "{app}"

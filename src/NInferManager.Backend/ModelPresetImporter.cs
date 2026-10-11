@@ -28,6 +28,7 @@ public static class ModelPresetImporter
         var allowedFeatures=new HashSet<string>(["dflash2","dflash","mtp","proposalHead","ngramDrafting","vision","structuredOutput"],StringComparer.Ordinal);
         if(engine.TryGetProperty("requiredFeatures",out var features)&&features.EnumerateArray().Any(x=>!allowedFeatures.Contains(x.GetString()??"")))throw new InvalidDataException("The preset requires features this adapter does not support.");
         var p=SettingsService.Clone(baseline);var r=root.GetProperty("runtime");
+        p.ManageAdvancedSettings=false;p.ManualAdvancedSettings=null;
         p.AutoContext=root.GetProperty("mode").GetString()=="automatic";
         p.MaxContext=r.GetProperty("maxContext").GetInt32();p.CustomKvCapacity=p.MaxContext;
         p.KvCapacityMode=KvCapacityMode.Auto;

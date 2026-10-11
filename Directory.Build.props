@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <Version>0.0.1</Version>
+    <Version>1.0.0</Version>
     <Company>NInferEZ contributors</Company>
     <Product>NInferEZ Manager</Product>
     <Copyright>Copyright (c) 2026 NInferEZ Manager contributors</Copyright>

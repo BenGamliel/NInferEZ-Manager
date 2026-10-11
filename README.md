@@ -1,119 +1,78 @@
 # NInferEZ Manager
 
-A native Windows control center for [NInferEZ Engine](https://github.com/BenGamliel/NInferEZ-Engine):
-simple model and API management first, useful controls and diagnostics when you need them.
+Run local NInfer models on Windows from a desktop application. Manage models, GPU engines, inference profiles, API access, logs and conversions in one place.
 
-[Download Installer](https://github.com/BenGamliel/NInferEZ-Manager/releases/download/v0.0.1/NInferEZ-Manager-Setup-0.0.1.exe) ·
-[Download Portable](https://github.com/BenGamliel/NInferEZ-Manager/releases/download/v0.0.1/NInferEZ-Manager-Portable-0.0.1.zip) ·
-[Release notes and checksums](https://github.com/BenGamliel/NInferEZ-Manager/releases/tag/v0.0.1)
+[Download 1.0.0](https://github.com/BenGamliel/NInferEZ-Manager/releases/tag/v1.0.0) · [User guide](docs/USER-GUIDE.md) · [Models](docs/MODELS.md) · [Report an issue](https://github.com/BenGamliel/NInferEZ-Manager/issues)
 
-Windows x64. Engine packages are selected and downloaded separately; no model weights are bundled.
-This first release is available for community testing, not a claim of qualification on every GPU.
+<img src="assets/NInferEZ.svg" alt="NInferEZ Manager" width="80">
 
-![NInferEZ Manager Overview](assets/screenshots/overview.jpg)
+## Download
 
-*Actual 0.0.1 desktop interface. The model is unloaded; the Decode card shows retained request
-metrics, not generation performed for this screenshot. Saved context is a limit, not occupied context.*
+| Package | Use |
+|---|---|
+| [Windows installer](https://github.com/BenGamliel/NInferEZ-Manager/releases/download/v1.0.0/NInferEZ-Manager-Setup-1.0.0.exe) | Install the application and shortcuts for your Windows account |
+| [Portable ZIP](https://github.com/BenGamliel/NInferEZ-Manager/releases/download/v1.0.0/NInferEZ-Manager-Portable-1.0.0.zip) | Extract the complete archive into a writable folder and run `NInferEZ Manager.exe` |
+| [SHA256 checksums](https://github.com/BenGamliel/NInferEZ-Manager/releases/download/v1.0.0/SHA256SUMS.txt) | Verify downloaded packages |
 
-The OpenAI-compatible API starts with the application, normally on `http://127.0.0.1:8173/v1`.
-Models load on their first inference request, not just because the window is open.
-The default memory policy unloads the model after three idle minutes.
-
-Product version is **0.0.1**. Current implementation and test evidence are tracked in
-[the acceptance matrix](docs/ACCEPTANCE-MATRIX.md); a successful build is not a GPU qualification.
-The [publication verification record](docs/PUBLICATION-0.0.1.md) describes exactly what was checked
-for these downloads and which qualification gates remain open.
+Windows x64. The application and CPU conversion runtime are included; engine packages and model weights are downloaded separately. Public packages contain no personal settings or model weights. Releases are currently unsigned, so Windows may display a publisher warning.
 
 ## Getting started
 
-1. Install the application, or extract the complete Portable ZIP to a writable folder. Do not run an EXE from inside the ZIP.
-2. Open Manager. If no engine is available, choose the recommended hardware package on **Engine** and let verification complete. Manual package selection remains available.
-3. Put a supported `.ninfer` artifact in the displayed **Models** folder, or use **Link a model** to keep it at its current location. Linking does not copy weights.
-4. Select a model and review its profile. An optional API name can be entered by you; otherwise the existing model ID is used.
-5. Copy the endpoint and exact model name into your OpenAI-compatible client. An arbitrary client API key is not authentication: it must match the Manager key if you configured one.
+1. Install Manager or extract the Portable ZIP. Do not run an executable inside an archive.
+2. On **Engine**, download the package recommended for your GPU. Integrity is checked before activation.
+3. On **Models**, download a recommendation, put a supported `.ninfer` file in the Models folder, or link an existing file without copying it.
+4. Keep managed settings enabled for ordinary use. You may optionally choose an API name for each model.
+5. Connect an OpenAI-compatible client to `http://127.0.0.1:8173/v1`, using the exact model name shown in Manager.
 
-The API can list available models before loading one. The first generation includes model loading
-and, on a new GPU, possible route calibration. Loading progress is not an invented percentage;
-use **Cancel loading** if you want to stop. Merely opening or hiding the window is not a model load.
+The API starts with the application. Models load when needed for inference, not simply because the window is open. The default memory policy unloads a model after **three idle minutes**. Listing models does not load their weights. Requests can select library models by API name; one model occupies the inference GPU at a time.
 
-## Everyday controls
+## Features
 
-- **Overview:** API, selected/loaded model, runtime state and relevant next action.
-- **Models:** local/linked library, optional API aliases, profiles and curated recommendations.
-- **Requests:** recent engine metrics; unavailable values are not benchmark results.
-- **Logs:** bounded technical history, search and the logs folder.
-- **Engine:** compatible packages, verified downloads and selection.
-- **Settings:** appearance, startup, memory policy, local API and maintenance. Ordinary preferences save automatically; profile and API changes have their own explicit actions.
+- Local/linked model library, editable API aliases, profiles, recommendations and variant selection.
+- Managed settings that adapt dependent controls to the model and engine; advanced manual controls remain available with understandable errors.
+- Fits, Close and Not recommended VRAM estimates, including a practical context allowance rather than file size alone.
+- Automatic API listening, lazy model loading, adjustable idle unload, loading cancellation and opt-in LAN access.
+- GPU-specific engine downloads, SHA256 verification, activation and update checks.
+- Guided/manual conversion using the same backend as the standalone Converter.
+- Request metrics, searchable logs, logs-folder access, tray operation and single-instance activation.
 
-LAN access is off by default. Enabling it exposes the listener on network interfaces, including VPN
-interfaces where permitted. Configure an API key and review firewall/VPN access; Manager does not
-silently modify those services. API access does not require the model to be manually preloaded.
+## GPU compatibility
 
-## Packages and data
+| GPU family | Package | Native NVFP4 weights | Qualification |
+|---|---|---|---|
+| Compatible RTX 3000 / Ampere, compute capability 8.6 | `sm86` | No | Community Preview |
+| Compatible RTX 4000 / Ada, compute capability 8.9 | `sm89` | No | Community Preview |
+| Compatible RTX 5000 / Blackwell, compute capability 12.0 | `sm120a` | Yes | RTX 5090 measurements available; other cards are Community Preview |
 
-The clean Installer and Portable do not contain model weights or personal settings. A separate
-ready-to-test Portable can include a verified engine; its local links/settings are private test data,
-not a public release. Models are kept separately and are not replicated into every application build.
+A matching CUDA target does not establish that every card/model combination was tested. A compatible NVIDIA driver and enough available VRAM are required. Artifact architecture, encoded tensors and optional components also matter. A valid v3 container alone is not universal model support.
 
-Portable data lives beside the application. Installed mutable data lives under the documented
-per-user data root; legacy model paths can remain linked rather than being copied. External model
-links do not give uninstall permission to delete the external files. Uninstall keeps managed data
-unless you explicitly choose removal.
+## Models and measurements
 
-Keep the complete package layout together. Moving a Portable preserves its relative local layout,
-but an external model link still needs its target to exist. Back up profiles/settings before manually
-rearranging data directories.
+[Available models](docs/MODELS.md) include OrcaRouter IQ3_XXS, Swift NVFP4 and Heretic IQ2_XS. Their cards contain artifact-specific features, licenses and available benchmarks. Configured context capacity is not actual prompt length, and peak decode speed is not an average or loading time.
 
-## Compatibility and evidence
+Compatible catalog additions can arrive without an application update. New architectures or capabilities may need a new engine/application version.
 
-Engine targets are architecture-specific: `sm86`, `sm89` and `sm120a`. Blackwell compute capability
-12.0 maps to the `sm120a` package; a matching architecture does not establish that every model or
-every card was tested. Untested combinations remain Community Preview. Native NVFP4 support is
-not implied for the older targets.
+## Network and data
 
-Actual format/components, engine capabilities, driver and memory budget all matter. Auto context
-is an estimate, not a promise that a 512K prompt fits or loads instantly. Exact/custom profiles must
-not silently change quantization or KV quality. A throughput improvement requires an actual GPU
-comparison with the same binary, artifact and effective profile.
+The API is local-only by default. LAN access is optional; configure an API key and review firewall/VPN access before enabling it. Manager does not silently change those services.
 
-## Build and test
+Portable data lives beside the application; installed data uses the per-user location described in the [guide](docs/USER-GUIDE.md). External model links require their targets to remain available. Uninstalling does not delete linked files outside managed application folders.
+
+## Ecosystem
+
+[NInferEZ Engine](https://github.com/BenGamliel/NInferEZ-Engine) provides standalone serving and inspection. [NInferEZ Converter](https://github.com/BenGamliel/NInferEZ-Converter) provides independent conversion. [Models on Hugging Face](https://huggingface.co/2beng2) are downloaded separately. See the [ecosystem guide](docs/ECOSYSTEM.md).
+
+## Development and licensing
 
 ```powershell
 dotnet build NInferEZ.Manager.slnx -c Release
-dotnet run --project tests\NInferManager.Backend.Tests\NInferManager.Backend.Tests.csproj -c Release
-.\scripts\product-check.ps1
+dotnet run --project tests/NInferManager.Backend.Tests -c Release
+dotnet run --project tests/NInferManager.Control.Tests -c Release
+dotnet run --project tests/NInferManager.Update.Tests -c Release
 ```
 
-Run all three host-only regression suites and the static product checks with:
+These are host-only checks, not GPU qualification. See [architecture](docs/ARCHITECTURE.md) and [acceptance coverage](docs/ACCEPTANCE-MATRIX.md).
 
-```powershell
-.\scripts\verify-host.ps1
-```
-
-These are host-only checks; they do not load real model weights or allocate inference GPU memory.
-The active completion plan is [PRODUCT-PLAN.md](docs/PRODUCT-PLAN.md). Historical plans and the
-code-review report remain references, not fresh verification evidence.
-
-## Package
-
-Use the pinned SDK/runtime toolchain and an extracted, verified engine directory containing
-`ninfer-serve.exe` and `engine-manifest.json`:
-
-```powershell
-.\scripts\build.ps1 -BuildId dev-001 -EngineSource '.\verified-engine'
-.\scripts\product-check.ps1 -PackagePath '.\artifacts\0.0.1\dev-001\packages\Portable\NInferEZ Manager'
-.\scripts\product-check.ps1 -PackagePath '.\artifacts\0.0.1\dev-001\packages\Test Portable\NInferEZ Manager' -LocalTest
-```
-
-Build IDs are provenance metadata; user-facing product version remains `0.0.1`. Inspect package
-audit, hashes and build metadata before sharing. Never upload the local test copy or diagnostics
-without reviewing their contents. No model weights belong in this source repository.
-
-## Credits
-
-NInferEZ Manager and NInferEZ Engine are separate products. Engine derives from the upstream
-NInfer/ninfer-all work; its own repository includes provenance and license notices. Manager's
-[third-party notices](docs/THIRD-PARTY-NOTICES.md) accompany its packages. The publisher mark is
-secondary to the NInferEZ application icon.
+Manager uses the [MIT license](LICENSE). Bundled components retain their [third-party notices](docs/THIRD-PARTY-NOTICES.md); model licenses are independent. The Engine derives from NInfer/ninfer-all, whose upstream authorship and changes are documented in its repository. NInferEZ is an independent distribution.
 
 <p><small>By</small><br><img src="assets/2beng2.png" alt="2beng2" width="120"></p>

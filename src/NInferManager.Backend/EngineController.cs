@@ -18,6 +18,7 @@ public sealed class EngineController : IAsyncDisposable
     private readonly ProcessJob _processJob=new();
     private Process? _process;
     private readonly ConcurrentQueue<string> _startupMessages = new();
+    private readonly ConcurrentQueue<string> _startupFailures = new();
     private readonly object _operationSync = new();
     private CancellationTokenSource? _loadCancellation;
     private Task? _loadTask;
@@ -37,6 +38,7 @@ public sealed class EngineController : IAsyncDisposable
     }
     private IReadOnlyList<string> BuildArguments(ModelCatalogEntry model, ModelProfile p, ManagerSettings settings)
     {
+        p = p.ManageAdvancedSettings ? ProfileSettingsPolicy.Managed(p, model.RecommendedProfile()) : ProfileSettingsPolicy.Effective(p);
         var path = _catalog.ResolvePath(model);
         if(model.InvalidAdjacentPreset)throw new InvalidOperationException(model.PresetStatus);
         SettingsService.ValidateProfile(p);
@@ -49,7 +51,7 @@ public sealed class EngineController : IAsyncDisposable
         if (model.Inspected)
         {
             if (!model.CompatibleWithBuild) throw new InvalidOperationException("The selected engine build cannot execute this artifact. Select a compatible engine in Engine.");
-            if (p.SpeculativeMode == SpeculativeMode.Dflash2 && !model.HasDflash2 || p.SpeculativeMode == SpeculativeMode.Dflash && !model.HasDflash || p.SpeculativeMode == SpeculativeMode.Mtp && !model.HasMtp) throw new InvalidOperationException("The selected speculation mode is not present in this artifact. Choose one reported by model inspection.");
+            if (p.SpeculativeMode == SpeculativeMode.Dflash2 && !model.HasDflash2 || p.SpeculativeMode == SpeculativeMode.Dflash && !model.HasDflash || p.SpeculativeMode == SpeculativeMode.Mtp && !model.HasMtp) throw new InvalidOperationException($"This model does not include {p.SpeculativeMode} acceleration. Choose Disabled or a supported mode under Generation acceleration in Inference profile.");
             if (p.VisionEnabled && !model.Vision) throw new InvalidOperationException("This model does not contain a vision component. Disable vision for this profile.");
         }
         var args = new List<string> { path, "--model-id", settings.ModelAliases.GetValueOrDefault(model.FileName, model.ModelId), "--max-context", I(p.MaxContext), "--default-max-tokens", I(p.DefaultMaxTokens), "--kv-dtype", p.KvPrecision.ToString().ToLowerInvariant(), "--device", I(p.Device), "--max-concurrency", I(p.MaxConcurrency), "--max-pending-requests", I(p.MaxPendingRequests), "--pending-timeout-ms", I(p.PendingTimeoutMs), "--max-request-mib", I(p.MaxRequestMiB), "--log-stats-interval-ms", I(p.LogStatsIntervalMs), "--media-cache-mib", I(p.MediaCacheMiB), "--media-live-mib", I(p.MediaLiveMiB), "--media-preprocess-threads", I(p.MediaPreprocessThreads), "--device-state-slots", I(p.DeviceStateSlots), "--host-state-slots", I(p.HostStateSlots), "--host-kv-mib", I(p.HostKvMiB), "--response-store-max-records", I(p.ResponseStoreMaxRecords), "--response-store-max-mib", I(p.ResponseStoreMaxMiB), "--prefill-chunk", I(p.PrefillChunk), "--host", "127.0.0.1", "--port", I(settings.BackendPort) };
@@ -58,8 +60,8 @@ public sealed class EngineController : IAsyncDisposable
         if (p.KvCapacityMode == KvCapacityMode.Auto) Add(args, "--kv-headroom-mib", p.KvHeadroomMiB);
         if (p.KvCapacityMode == KvCapacityMode.Custom) Add(args, "--kv-capacity", p.CustomKvCapacity);
         if (p.SpeculativeMode != SpeculativeMode.Disabled) { Add(args, "--spec", p.SpeculativeMode.ToString().ToLowerInvariant()); Add(args, "--draft-tokens", p.DraftTokens); }
-        if (p.LmHeadDraft) args.Add("--lm-head-draft");
-        if (p.NgramDraftTokens > 0) Add(args, "--ngram-draft-tokens", p.NgramDraftTokens);
+        if (p.SpeculativeMode != SpeculativeMode.Disabled && p.LmHeadDraft) args.Add("--lm-head-draft");
+        if (p.SpeculativeMode != SpeculativeMode.Disabled && p.NgramDraftTokens > 0) Add(args, "--ngram-draft-tokens", p.NgramDraftTokens);
         if (p.StructuredOutput) args.Add("--structured-output");
         if (p.AlternativePrefixCache) args.Add("--use-alt-prefix-caching");
         if (p.HostCacheMiB is int hostCache)
@@ -68,16 +70,22 @@ public sealed class EngineController : IAsyncDisposable
             Add(args,"--host-cache-mib",hostCache);
         }
         if (p.VisionEnabled && model.Vision) args.Add("--vision");
+        else
+        {
+            RemovePairs(args, "--media-cache-mib", "--media-live-mib", "--media-preprocess-threads");
+        }
+        if (p.AlternativePrefixCache)
+            RemovePairs(args, "--device-state-slots", "--host-state-slots", "--host-kv-mib");
         if (!p.CudaGraphEnabled) args.Add("--no-cuda-graph");
         if (!p.PrefixReuseEnabled) args.Add("--no-prefix-reuse");
         if (p.GdnStateFp16) args.Add("--gdn-state-fp16");
-        if (p.MtpAttentionWindow > 0) Add(args, "--mtp-attention-window", p.MtpAttentionWindow);
+        if (p.SpeculativeMode == SpeculativeMode.Mtp && p.MtpAttentionWindow > 0) Add(args, "--mtp-attention-window", p.MtpAttentionWindow);
         if (model.NativeContext>0&&p.MaxContext > model.NativeContext&&(model.Repository!="Local file"||model.YarnSupported)) args.Add("--rope-yarn");
         if (!p.ThinkingEnabled) args.Add("--no-thinking");
         if (p.PreserveThinking) args.Add("--preserve-thinking");
-        if (p.MaxPrivateContinuations >= 0) Add(args, "--max-private-continuations", p.MaxPrivateContinuations);
-        if (p.MaxSharedPrefixes >= 0) Add(args, "--max-shared-prefixes", p.MaxSharedPrefixes);
-        if (p.MaxLongAnchorsPerContinuation >= 0) Add(args, "--max-long-anchors-per-continuation", p.MaxLongAnchorsPerContinuation);
+        if (!p.AlternativePrefixCache && p.MaxPrivateContinuations >= 0) Add(args, "--max-private-continuations", p.MaxPrivateContinuations);
+        if (!p.AlternativePrefixCache && p.MaxSharedPrefixes >= 0) Add(args, "--max-shared-prefixes", p.MaxSharedPrefixes);
+        if (!p.AlternativePrefixCache && p.MaxLongAnchorsPerContinuation >= 0) Add(args, "--max-long-anchors-per-continuation", p.MaxLongAnchorsPerContinuation);
         if (p.MaxCacheMarkersPerRequest >= 0) Add(args, "--max-cache-markers-per-request", p.MaxCacheMarkersPerRequest);
         if (p.DefaultThinkingBudget is not null) Add(args, "--default-thinking-budget", p.DefaultThinkingBudget.Value);
         if (p.Greedy) args.Add("--greedy");
@@ -96,6 +104,12 @@ public sealed class EngineController : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(settings.ApiKey)) Add(args, "--api-key", settings.ApiKey);
         args[2]=args[2].Trim();
         return args;
+    }
+
+    private static void RemovePairs(List<string> args, params string[] flags)
+    {
+        for (var index = args.Count - 2; index > 0; index--)
+            if (flags.Contains(args[index])) { args.RemoveAt(index + 1); args.RemoveAt(index); }
     }
 
     public EngineOperationStatus StartLoad(ModelCatalogEntry? requestedModel=null)
@@ -186,7 +200,7 @@ public sealed class EngineController : IAsyncDisposable
         catch (Exception ex)
         {
             _log.Write("NInfer load operation failed", ex);
-            CompleteOperation(operationId, EngineOperationState.Failed, "Failed", "NInfer could not load the model.", ex.Message);
+            CompleteOperation(operationId, EngineOperationState.Failed, "Failed", "NInfer could not load the model.", StartupDiagnostics.UserMessage(ex.Message));
         }
     }
 
@@ -200,9 +214,10 @@ public sealed class EngineController : IAsyncDisposable
             var engineDirectory = _enginePackages?.ActiveDirectory ?? _paths.EngineDirectory;
             await _catalog.InspectAsync(model, engineDirectory, token);
             var profile = SettingsService.Clone(_settings.ProfileFor(model));
+            profile = profile.ManageAdvancedSettings ? ProfileSettingsPolicy.Managed(profile, model.RecommendedProfile()) : ProfileSettingsPolicy.Effective(profile);
             var launchSettings = _settings.Snapshot();
             launchSettings.ApiKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-            if (profile.AutoContext)
+            if (profile.AutoContext && !profile.ManageAdvancedSettings)
             {
                 UpdateOperation("Detecting hardware", "Selecting a context size for the detected GPU.");
                 var gpu = await GpuMonitor.ReadAsync(profile.Device);
@@ -237,6 +252,7 @@ public sealed class EngineController : IAsyncDisposable
             foreach (var arg in BuildArguments(model, profile, launchSettings)) info.ArgumentList.Add(arg);
             var process = new Process { StartInfo = info, EnableRaisingEvents = true };
             while (_startupMessages.TryDequeue(out _)) { }
+            while (_startupFailures.TryDequeue(out _)) { }
             process.OutputDataReceived += (_, e) => { if (e.Data is not null) RecordEngineLine(e.Data); };
             process.ErrorDataReceived += (_, e) => { if (e.Data is not null) RecordEngineLine(e.Data); };
             process.Exited += (_, _) => { if (ReferenceEquals(_process, process) && State is EngineState.Loading or EngineState.Ready) State = EngineState.Unloaded; };
@@ -293,6 +309,11 @@ public sealed class EngineController : IAsyncDisposable
         _log.Write("NInfer: " + line);
         _startupMessages.Enqueue(line);
         while (_startupMessages.Count > 12) _startupMessages.TryDequeue(out _);
+        if (StartupDiagnostics.IsFailure(line))
+        {
+            _startupFailures.Enqueue(line);
+            while (_startupFailures.Count > 8) _startupFailures.TryDequeue(out _);
+        }
         if (line.Contains("calibrat", StringComparison.OrdinalIgnoreCase)) UpdateOperation("Calibrating", "Calibrating optimized routes for this GPU. First launch can take several minutes.");
         else if (line.Contains("load", StringComparison.OrdinalIgnoreCase) && line.Contains("model", StringComparison.OrdinalIgnoreCase)) UpdateOperation("Loading model", "Loading model weights into memory.");
         else if (line.Contains("cuda", StringComparison.OrdinalIgnoreCase) || line.Contains("kernel", StringComparison.OrdinalIgnoreCase)) UpdateOperation("Preparing GPU", "Preparing optimized GPU kernels.");
@@ -315,7 +336,7 @@ public sealed class EngineController : IAsyncDisposable
         }
     }
     private static EngineOperationStatus IdleOperation() => new(null, EngineOperationState.None, "Idle", "No engine operation is running.", null, 0, false);
-    private string StartupDetail() => _startupMessages.IsEmpty ? "Open the manager log for startup details." : string.Join(" | ", _startupMessages.TakeLast(3));
+    private string StartupDetail() => StartupDiagnostics.Summarize(_startupFailures.IsEmpty ? _startupMessages : _startupFailures);
     private static string I(object value) => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
     public static int RecommendContext(ModelCatalogEntry model, GpuStatus gpu, ModelProfile? profile = null)
     {

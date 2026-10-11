@@ -19,11 +19,16 @@ builder.Services.AddSingleton<ControlAuthentication>();
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<ManagerLog>();
 builder.Services.AddSingleton<ModelCatalog>();
+builder.Services.AddSingleton<CatalogMonitor>();
+builder.Services.AddHostedService(provider=>provider.GetRequiredService<CatalogMonitor>());
 builder.Services.AddSingleton<ModelDownloadService>();
 builder.Services.AddSingleton<EnginePackageService>();
 builder.Services.AddSingleton<EngineController>();
 builder.Services.AddSingleton<PublicApiProxy>();
 builder.Services.AddSingleton<UpdateService>();
+builder.Services.AddSingleton<IConverterRunner,ConverterRunner>();
+builder.Services.AddSingleton<ConversionService>();
+builder.Services.AddHostedService(provider=>provider.GetRequiredService<ConversionService>());
 var app = builder.Build();
 Process? ownedParent=null;
 if(int.TryParse(Environment.GetEnvironmentVariable("NINFEREZ_MANAGER_PARENT_PID"),out var parentPid)&&parentPid>0&&parentPid!=Environment.ProcessId)
@@ -96,6 +101,13 @@ app.MapGet("/control/v1/status", async (EngineController engine) =>
         {LoadedModelId=engine.Session?.ModelId,LoadedContext=engine.Session?.Profile.MaxContext,LoadedBackendPort=engine.Session?.Port,LoadedEngineArchitecture=engine.Session?.Architecture,LoadedEngineVersion=engine.Session?.EngineVersion,ApiEnabled=proxy.IsEnabled};
 });
 app.MapGet("/control/v1/settings", (SettingsService store) => store.Snapshot());
+app.MapGet("/control/v1/converter/capabilities", (ConversionService converter,CancellationToken token)=>converter.CapabilitiesAsync(token));
+app.MapGet("/control/v1/converter/status", (ConversionService converter)=>converter.Snapshot());
+app.MapPost("/control/v1/converter/probe", (ConversionRequest request,ConversionService converter)=>Results.Accepted(value:converter.Start("probe",request)));
+app.MapPost("/control/v1/converter/analyze", (ConversionRequest request,ConversionService converter)=>Results.Accepted(value:converter.Start("analyze",request)));
+app.MapPost("/control/v1/converter/check", (ConversionRequest request,ConversionService converter)=>Results.Accepted(value:converter.Start("inspect",request)));
+app.MapPost("/control/v1/converter/convert", (ConversionRequest request,ConversionService converter)=>Results.Accepted(value:converter.Start("convert",request)));
+app.MapPost("/control/v1/converter/cancel", (ConversionService converter)=>converter.Cancel()?Results.Ok(new ApiResult(true,"Safe cancellation requested.")):Results.Conflict(new ApiResult(false,"No conversion is running.")));
 app.MapPut("/control/v1/settings", (ManagerSettings value, SettingsService store) => Results.Ok(store.Replace(value)));
 app.MapPatch("/control/v1/settings", (SettingsPatchRequest value,SettingsService store,ModelCatalog catalog)=>
 {
@@ -106,7 +118,7 @@ app.MapPatch("/control/v1/settings", (SettingsPatchRequest value,SettingsService
         var p=System.Text.Json.JsonSerializer.Deserialize<ModelProfile>(profile.Value,SettingsService.JsonOptions);
         if(model?.Inspected==true&&p is not null&&
             (p.SpeculativeMode==SpeculativeMode.Mtp&&!model.HasMtp||p.SpeculativeMode==SpeculativeMode.Dflash&&!model.HasDflash||p.SpeculativeMode==SpeculativeMode.Dflash2&&!model.HasDflash2||p.VisionEnabled&&!model.Vision))
-            throw new ArgumentException("This profile requests a vision or speculation component that is not present in the inspected model.");
+            throw new ArgumentException("This model does not contain the selected image or acceleration component. Turn off Image input or choose Disabled/a supported Generation acceleration mode in Inference profile.");
     }
     var saved=store.Patch(value);
     if(value.Changes.TryGetProperty("profiles",out var profiles)&&profiles.ValueKind==System.Text.Json.JsonValueKind.Object)
@@ -147,11 +159,18 @@ app.MapPost("/control/v1/port/restart", async (PortChangeRequest value, Settings
 });
 
 app.MapGet("/control/v1/models", (ModelCatalog catalog) => catalog.Snapshot());
+app.MapGet("/control/v1/catalog/notifications",(ModelCatalog catalog,CatalogMonitor monitor)=>catalog.Notifications(monitor.StartupCheckComplete));
+app.MapPost("/control/v1/catalog/notifications/dismiss",(DismissModelAnnouncementsRequest request,ModelCatalog catalog)=>
+{
+    if(request.Identities is null)return Results.BadRequest(new ApiResult(false,"Choose the model announcements to dismiss."));
+    catalog.DismissAnnouncements(request.Identities);
+    return Results.Ok(new ApiResult(true,"Model announcement dismissed. Recent models retain their NEW badge."));
+});
 app.MapPost("/control/v1/models/{file}/seen",(string file,ModelCatalog catalog)=>{var entry=catalog.Find(file)??throw new FileNotFoundException("The model is not in the library.");catalog.MarkSeen(entry);return new ApiResult(true,"This artifact was marked as seen.");});
 app.MapPost("/control/v1/catalog/refresh", async (ModelCatalog catalog, SettingsService store, CancellationToken token) =>
 {
     var local=catalog.RefreshLocalArtifacts();
-    var online=store.Current.AutoCheckCatalog?await catalog.RefreshOnlineAsync(token):0;
+    var online=await catalog.RefreshOnlineAsync(token);
     return new ApiResult(true,$"Library refreshed; {local} local model(s) and {online} online profile(s) added.");
 });
 app.MapPost("/control/v1/models/link", async (LinkModelRequest value, ModelCatalog catalog,EnginePackageService packages,CancellationToken token) =>
@@ -218,6 +237,7 @@ app.MapPost("/control/v1/models/{file}/download", (string file, ModelCatalog cat
 {
     var entry = catalog.Find(file);
     if (entry is null) return Results.NotFound(new ApiResult(false, "Model is not in the catalog."));
+    if (catalog.IsInstalled(entry)) return Results.Ok(new ApiResult(true, "This model variant is already available locally. No download is needed."));
     if (!entry.DownloadAvailable) return Results.BadRequest(new ApiResult(false, "This model is supplied with the full installer or can be imported from an existing NInfer artifact."));
     downloads.Start(entry);
     return Results.Accepted(value: new ApiResult(true, "Download started."));
@@ -303,8 +323,9 @@ app.MapPost("/control/v1/update/download", (UpdateInfo value, UpdateService upda
 });
 app.MapGet("/control/v1/update/progress", (UpdateService updates) => updates.Current);
 app.MapPost("/control/v1/update/cancel",(UpdateService updates)=>{updates.CancelDownload();return new ApiResult(true,"Update download cancellation requested.");});
-app.MapPost("/control/v1/update/apply", async (ApplyUpdateRequest value, UpdateService updates, AppPaths paths,EngineController engine,CancellationToken token) =>
+app.MapPost("/control/v1/update/apply", async (ApplyUpdateRequest value, UpdateService updates, AppPaths paths,EngineController engine,ConversionService converter,CancellationToken token) =>
 {
+    if(converter.Snapshot().Running)return Results.Conflict(new ApiResult(false,"Finish or cancel the conversion before applying an application update."));
     var package = updates.Current?.PackagePath;
     if (string.IsNullOrWhiteSpace(package) || !File.Exists(package))
         return Results.BadRequest(new ApiResult(false, "No verified update is ready."));
@@ -334,13 +355,6 @@ app.MapPost("/control/v1/open", (string target, AppPaths paths, ManagerLog log) 
 });
 
 app.Lifetime.ApplicationStopping.Register(() => proxy.DisposeAsync().AsTask().GetAwaiter().GetResult());
-var startupCatalog = app.Services.GetRequiredService<ModelCatalog>();
-if (startupCatalog.ShouldRefresh())
-    _ = Task.Run(async () =>
-    {
-        try { await startupCatalog.RefreshOnlineAsync(); }
-        catch (Exception ex) { app.Services.GetRequiredService<ManagerLog>().Write("Automatic catalog refresh failed", ex); }
-    });
 var startupEngines = app.Services.GetRequiredService<EnginePackageService>();
 if (startupEngines.ShouldRefresh())
     _ = Task.Run(async () =>

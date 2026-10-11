@@ -267,12 +267,14 @@ public sealed class EnginePackageService : IDisposable
     }
     private static bool IsUnder(string path, string root) => path.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     private static JsonSerializerOptions JsonOptions() => new(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true, WriteIndented = true };
-    private static EngineChannel BuiltInChannel() => new(1, "NInferEZ Engine", DateTimeOffset.Parse("2026-09-28T00:00:00Z"),
-    [
-        new("0.1.0-preview.1",1,"windows-x64","sm86","NVIDIA Ampere / RTX 3000 Series",["NVIDIA GeForce RTX 3090","NVIDIA GeForce RTX 3090 Ti"],false,"preview","build-verified-preview","NInferEZ-Engine-0.1.0-preview.1-sm86-windows-x64.zip",1335702326,"0c070c048a57a652294e4ec2d2a98590de368b1ebe331870e425ff483afaf7f3","https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v0.1.0-preview.1/NInferEZ-Engine-0.1.0-preview.1-sm86-windows-x64.zip"),
-        new("0.1.0-preview.1",1,"windows-x64","sm89","NVIDIA Ada / RTX 4000 Series",["NVIDIA GeForce RTX 4090"],false,"preview","build-verified-preview","NInferEZ-Engine-0.1.0-preview.1-sm89-windows-x64.zip",1327225574,"1c7f0ff4198d5d5987dad3569c6a3aed7c3e0cb08e684e363cae9e823fee7a3d","https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v0.1.0-preview.1/NInferEZ-Engine-0.1.0-preview.1-sm89-windows-x64.zip"),
-        new("0.1.0-preview.1",1,"windows-x64","sm120a","NVIDIA Blackwell / RTX 5000 Series",["NVIDIA GeForce RTX 5090","NVIDIA RTX PRO 6000 Blackwell"],true,"preview","build-verified-preview","NInferEZ-Engine-0.1.0-preview.1-sm120a-windows-x64.zip",1112591446,"ce1081bbd6ef30828a28e26eec8f4e659c19a21696b17e53bb840fe3377e3306","https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v0.1.0-preview.1/NInferEZ-Engine-0.1.0-preview.1-sm120a-windows-x64.zip")
-    ]);
+    private static EngineChannel BuiltInChannel()
+    {
+        using var stream = typeof(EnginePackageService).Assembly.GetManifestResourceStream(
+            "NInferManager.Backend.Assets.engine-channel.json")
+            ?? throw new InvalidOperationException("The bundled engine channel is missing.");
+        using var reader = new StreamReader(stream);
+        return ParseAndValidateChannel(reader.ReadToEnd());
+    }
     public void Dispose() { _downloadCancellation?.Cancel(); _client.Dispose(); }
 
     private sealed record EngineChannel([property: JsonPropertyName("schemaVersion")] int SchemaVersion, [property: JsonPropertyName("product")] string Product, [property: JsonPropertyName("updatedAt")] DateTimeOffset UpdatedAt, [property: JsonPropertyName("packages")] IReadOnlyList<EnginePackage> Packages);

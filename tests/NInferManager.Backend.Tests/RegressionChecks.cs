@@ -43,7 +43,7 @@ internal static class RegressionChecks
             catch(InvalidDataException){assert(!File.Exists(final)&&!File.Exists(part),"hash mismatch never commits and removes untrusted partial");}
         }
 
-        var fullProfile=new ModelProfile{AutoContext=false,MaxContext=65536,DefaultMaxTokens=4096,KvPrecision=KvPrecision.Rk8v4,KvCapacityMode=KvCapacityMode.Custom,CustomKvCapacity=49152,SpeculativeMode=SpeculativeMode.Mtp,DraftTokens=3,MtpAttentionWindow=8192,VisionEnabled=false,ThinkingEnabled=false,PreserveThinking=false,CudaGraphEnabled=false,Temperature=0.6,TopP=0.85,TopK=24,HostStateSlots=2,HostKvMiB=512};
+        var fullProfile=new ModelProfile{AutoContext=false,MaxContext=65536,DefaultMaxTokens=4096,KvPrecision=KvPrecision.Rk8v4,KvCapacityMode=KvCapacityMode.Custom,CustomKvCapacity=81920,SpeculativeMode=SpeculativeMode.Mtp,DraftTokens=3,MtpAttentionWindow=8192,VisionEnabled=false,ThinkingEnabled=false,PreserveThinking=false,CudaGraphEnabled=false,Temperature=0.6,TopP=0.85,TopK=20,HostStateSlots=2,HostKvMiB=512};
         var preset=Path.Combine(paths.DataDirectory,"roundtrip.ninferez.json");
         File.WriteAllText(preset,ModelPresetImporter.Export(download,fullProfile));
         var imported=ModelPresetImporter.Read(preset,download,new ModelProfile());

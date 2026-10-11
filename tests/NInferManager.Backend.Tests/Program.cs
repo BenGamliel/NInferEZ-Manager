@@ -2,6 +2,12 @@ using NInferManager.Backend;
 using NInferManager.Contracts;
 using System.Security.Cryptography;
 
+if (args.Length==4 && args[0]=="--memory-fit-library")
+{
+    MemoryMetadataChecks.VerifyLibrary(args[1],args[2],int.Parse(args[3]));
+    return;
+}
+
 var root=Path.Combine(Path.GetTempPath(),"ninfer-manager-winui-tests",Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable("NINFEREZ_MANAGER_DATA_ROOT",Path.Combine(root,"Data"));
 Environment.SetEnvironmentVariable("NINFEREZ_MANAGER_MODELS_ROOT",Path.Combine(root,"Models"));
@@ -10,6 +16,11 @@ try
 {
     var paths=new AppPaths();
     var settings=new SettingsService(paths);
+    if(args.SequenceEqual(new[]{"--converter-only"}))
+    {
+        await ConversionChecks.RunAsync(paths,new ManagerLog(paths),Assert);
+        return;
+    }
     Assert(settings.Current.PublicPort==8173,"default port");
     Assert(!settings.Current.AllowLocalNetwork,"local-network access is disabled by default");
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5080")=="sm120a"&&EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5090")=="sm120a","RTX 5000 Series maps to the Blackwell sm120a package");
@@ -18,7 +29,7 @@ try
     Directory.CreateDirectory(paths.EngineDirectory);
     await File.WriteAllBytesAsync(Path.Combine(paths.EngineDirectory,"ninfer-serve.exe"),[0]);
     await File.WriteAllTextAsync(Path.Combine(paths.EngineDirectory,"engine-manifest.json"),"""
-        {"product":"NInferEZ Engine","contractVersion":1,"engineVersion":"0.1.0-preview.1","cudaArchitecture":"sm120a"}
+        {"product":"NInferEZ Engine","contractVersion":1,"engineVersion":"1.0.0","cudaArchitecture":"sm120a"}
         """);
     using(var enginePackages=new EnginePackageService(paths,new ManagerLog(paths),settings))
     {
@@ -29,7 +40,9 @@ try
     Assert(EditableSettingTypes.Supports(typeof(string))&&EditableSettingTypes.Supports(typeof(bool))&&EditableSettingTypes.Supports(typeof(int))&&EditableSettingTypes.Supports(typeof(double?))&&EditableSettingTypes.Supports(typeof(KvPrecision)),"advanced settings accept supported scalar types");
     Assert(!EditableSettingTypes.Supports(typeof(Dictionary<string,string>))&&!EditableSettingTypes.Supports(typeof(Dictionary<string,ModelProfile>))&&!EditableSettingTypes.Supports(typeof(DateTimeOffset?)),"advanced settings reject dictionaries and unsupported complex types");
     var catalog=new ModelCatalog(paths,settings);
-    Assert(catalog.Entries.Count==12,"the complete curated ninfer-all catalog is offered");
+    Assert(catalog.Entries.Count==4,"the curated catalog includes only our four published artifacts");
+    Assert(catalog.Entries.All(x=>x.Repository.StartsWith("2beng2/",StringComparison.Ordinal)),"recommendations contain no third-party model download links");
+    Assert(catalog.Entries.All(x=>x.Revision.Length==40&&x.Revision.All(Uri.IsHexDigit)),"every bundled catalog download is pinned to an immutable revision");
     var swift=catalog.Entries.Single(x=>x.ModelId=="swift-1.5-qwen3.8-27b-uncensored");
     var swiftProfile=swift.RecommendedProfile();
     Assert(swift.ArtifactVersion==3&&swift.DownloadAvailable&&swift.Revision!="main","Swift is downloaded from a pinned public revision");
@@ -52,7 +65,7 @@ try
     settings.Save();
     var swiftEngine=new EngineController(paths,settings,catalog,new ManagerLog(paths));
     var swiftArgs=swiftEngine.BuildArguments();
-    Assert(Has(swiftArgs,"--max-context","262144")&&Has(swiftArgs,"--kv-capacity","262144"),"Swift launch command uses 256K context and KV capacity");
+    Assert(Has(swiftArgs,"--max-context","262144")&&Has(swiftArgs,"--kv-capacity","auto"),"Managed Swift keeps its context ceiling and fits KV capacity using the engine");
     Assert(Has(swiftArgs,"--kv-dtype","nvfp4"),"Swift launch command uses NVFP4 KV");
     Assert(Has(swiftArgs,"--spec","dflash2")&&Has(swiftArgs,"--draft-tokens","7")&&swiftArgs.Contains("--lm-head-draft"),"Swift launch command uses DFlash2 K7");
     Assert(swiftArgs.Contains("--vision")&&Has(swiftArgs,"--prefill-chunk","2048"),"Swift launch command uses vision and prefill 2048");
@@ -61,19 +74,20 @@ try
     Assert(Has(swiftEngine.BuildArguments(),"--model-id","my-local-model"),"engine launch uses the user API model name");
     Assert(catalog.Snapshot().Single(x=>x.FileName==swift.FileName).ModelId=="my-local-model","model inventory exposes the user API model name");
     settings.Current.ModelAliases.Remove(swift.FileName);
-    Assert(catalog.Entries.Where(x=>x.ModelId.StartsWith("qwen3.6-27b")).All(x=>x.RecommendedSpeculativeMode==SpeculativeMode.Mtp&&x.RecommendedDraftTokens==3),"Qwen3.6 dense uses supported MTP3");
-    Assert(catalog.Entries.Single(x=>x.ModelId=="qwen3.8-27b").RecommendedSpeculativeMode==SpeculativeMode.Dflash2,"standard Qwen3.8 uses DFlash2");
-    Assert(catalog.Entries.Single(x=>x.ModelId=="qwen3.6-35b-a3b").RecommendedSpeculativeMode==SpeculativeMode.Dflash,"35B MoE uses supported DFlash");
-    var model=catalog.Entries.Single(x=>x.ModelId=="qwen3.8-27b-nvfp4");
+    var model=swift;
     settings.Current.ActiveModelFile=model.FileName;
     var profile=settings.ProfileFor(model);
-    Assert(profile.MaxContext==150_000,"v3 NVFP4 safe context");
+    profile.AutoContext=false;
+    profile.MaxContext=150_000;
+    profile.CustomKvCapacity=150_000;
+    Assert(profile.MaxContext==150_000,"manual NVFP4 context selection");
     Assert(profile.PrefillChunk==2048,"prefill 2048");
     Assert(profile.VisionEnabled,"vision enabled");
     Assert(profile.SpeculativeMode==SpeculativeMode.Dflash2,"DFlash2 enabled");
     Assert(profile.DraftTokens==7,"K7");
     Assert(profile.LmHeadDraft,"optimized proposal head enabled");
     profile.ChatTemplateFile="custom-template.jinja";
+    profile.ManageAdvancedSettings=false;
     profile.LogLevel=EngineLogLevel.Debug;
     Assert(profile.HostKvMiB==0&&profile.HostStateSlots==0,"RAM cache disabled");
     settings.Save();
@@ -98,6 +112,22 @@ try
     Assert(Has(iqArgs,"--kv-dtype","rk8v4")&&Has(iqArgs,"--spec","mtp"),"IQ3 uses measured RK8V4 and MTP");
     Assert(iqArgs.Contains("--gdn-state-fp16")&&Has(iqArgs,"--mtp-attention-window","8192"),"IQ3 uses its tuned recurrent-state profile");
     Assert(!iq.Vision&&!iqArgs.Contains("--vision"),"IQ3 never receives the unsupported Vision flag");
+    Assert(!iqArgs.Contains("--media-live-mib")&&!iqArgs.Contains("--media-cache-mib")&&!iqArgs.Contains("--media-preprocess-threads"),"text-only launch omits all inactive media budgets, never media-live zero");
+    Assert(Has(swiftArgs,"--media-live-mib","2048"),"vision launch retains the positive recommended live image budget");
+    var originalIqProfile=SettingsService.Clone(settings.ProfileFor(iq));
+    var staleIqProfile=settings.ProfileFor(iq);staleIqProfile.ManageAdvancedSettings=false;staleIqProfile.AutoContext=false;
+    staleIqProfile.MaxContext=32768;staleIqProfile.DefaultMaxTokens=4096;staleIqProfile.SpeculativeMode=SpeculativeMode.Disabled;
+    staleIqProfile.LmHeadDraft=true;staleIqProfile.MtpAttentionWindow=8192;staleIqProfile.NgramDraftTokens=15;
+    var disabledArgs=new EngineController(paths,settings,catalog,log).BuildArguments();
+    Assert(!disabledArgs.Contains("--lm-head-draft")&&!disabledArgs.Contains("--mtp-attention-window")&&!disabledArgs.Contains("--ngram-draft-tokens")&&!disabledArgs.Contains("--draft-tokens")&&!disabledArgs.Contains("--spec"),"disabled launch strips stale acceleration flags from real command construction");
+    Assert(Has(disabledArgs,"--max-context","32768")&&Has(disabledArgs,"--kv-capacity","32768"),"manual 32K context reaches both context and KV flags without automatic override");
+    Assert(staleIqProfile.LmHeadDraft&&staleIqProfile.MtpAttentionWindow==8192,"building a safe command does not destroy inactive manual preferences");
+    staleIqProfile.AlternativePrefixCache=true;staleIqProfile.PrefixReuseEnabled=true;
+    staleIqProfile.DeviceStateSlots=4;staleIqProfile.HostStateSlots=3;staleIqProfile.HostKvMiB=512;staleIqProfile.MaxSharedPrefixes=5;
+    var hybridArgs=new EngineController(paths,settings,catalog,log).BuildArguments();
+    Assert(hybridArgs.Contains("--use-alt-prefix-caching")&&!hybridArgs.Contains("--device-state-slots")&&!hybridArgs.Contains("--host-state-slots")&&!hybridArgs.Contains("--host-kv-mib")&&!hybridArgs.Contains("--max-shared-prefixes"),"alternative cache launch omits incompatible default-cache flags");
+    Assert(staleIqProfile.DeviceStateSlots==4&&staleIqProfile.MaxSharedPrefixes==5,"alternative cache does not destroy manual default-cache preferences");
+    settings.Current.Profiles[iq.FileName]=originalIqProfile;
     var external=Path.Combine(root,"existing-model.ninfer");
     await File.WriteAllBytesAsync(external,[1,2,3,4]);
     iq.SizeBytes=4;
@@ -165,6 +195,13 @@ try
     try{EngineController.RecommendContext(iq,new("tiny",0,1024,0,0));throw new Exception("no-fit context unexpectedly succeeded");}catch(InvalidOperationException){Assert(true,"no-fit automatic context fails explicitly");}
     Assert(!catalog.FindInstalledByApiName(" Integration-test-model ")?.FileName.Equals(iq.FileName,StringComparison.OrdinalIgnoreCase)??true,"API model routing requires the canonical identifier");
     await RegressionChecks.RunAsync(paths,settings,catalog,log,Assert);
+    ProfilePolicyChecks.Run(Assert);
+    MemoryFitChecks.Run(Assert);
+    MemoryMetadataChecks.Run(paths,settings,catalog,Assert);
+    ModelVariantChecks.Run(paths,settings,catalog,Assert);
+    await ModelAnnouncementChecks.RunAsync(paths,settings,log,Assert);
+    await ConversionChecks.RunAsync(paths,log,Assert);
+    PublisherCatalogChecks.Run(root,Assert);
     Console.WriteLine($"All {CheckCount.Count} backend contract, file I/O and fake-engine checks passed. No real model or GPU inference was loaded.");
 }
 finally

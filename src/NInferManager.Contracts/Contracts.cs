@@ -92,6 +92,8 @@ public sealed class ManagerSettings
 
 public sealed class ModelProfile
 {
+    public bool ManageAdvancedSettings { get; set; }
+    public Dictionary<string, System.Text.Json.JsonElement>? ManualAdvancedSettings { get; set; }
     public bool AutoContext { get; set; } = true;
     public bool VisionEnabled { get; set; } = true;
     public int MaxContext { get; set; } = 200_000;
@@ -173,7 +175,21 @@ public sealed record ModelInfo(
     public bool HasMtp { get; init; }
     public bool HasDflash { get; init; }
     public bool HasDflash2 { get; init; }
-    public string ModelCardUrl => $"https://huggingface.co/{Repository}";
+    public int EstimatedBaseVramMiB { get; init; }
+    public double EstimatedKvMiBPerKToken { get; init; }
+    public KvPrecision EstimateKvPrecision { get; init; }
+    public SpeculativeMode EstimateSpeculativeMode { get; init; }
+    public ModelMemoryGeometry? MemoryGeometry { get; init; }
+    public string FamilyId { get; init; } = "";
+    public string FamilyDisplayName { get; init; } = "";
+    public string VariantName { get; init; } = "";
+    public int VariantOrder { get; init; }
+    public string RemoteFileName { get; init; } = "";
+    public string Revision { get; init; } = "";
+    public string RecommendationKey => string.IsNullOrWhiteSpace(FamilyId) ? FileName : FamilyId;
+    public string ModelCardUrl => string.IsNullOrWhiteSpace(RemoteFileName) || string.IsNullOrWhiteSpace(Revision)
+        ? $"https://huggingface.co/{Repository}"
+        : $"https://huggingface.co/{Repository}/blob/{Revision}/{Uri.EscapeDataString(RemoteFileName)}";
     public string SizeText => SizeBytes <= 0 ? "Unknown" : $"{SizeBytes / 1024d / 1024d / 1024d:0.00} GiB";
 }
 

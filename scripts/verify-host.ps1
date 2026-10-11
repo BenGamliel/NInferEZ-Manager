@@ -30,6 +30,6 @@ foreach ($project in $projects) {
 if ($LASTEXITCODE -ne 0) { throw 'Static product checks failed.' }
 $totalChecks = 0
 foreach ($result in $results) { $totalChecks += [int]$result['passedChecks'] }
-$report = [ordered]@{ productVersion='0.0.1'; testedAtUtc=[DateTimeOffset]::UtcNow.ToString('O'); gpuTests=$false; nativeUiTests=$false; results=@($results); totalPassedChecks=$totalChecks }
+$report = [ordered]@{ productVersion='1.0.0'; testedAtUtc=[DateTimeOffset]::UtcNow.ToString('O'); gpuTests=$false; nativeUiTests=$false; results=@($results); totalPassedChecks=$totalChecks }
 [IO.File]::WriteAllText((Join-Path $resultDirectory 'host-results.json'), ($report | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
 Write-Host "Host verification passed. Evidence: $resultDirectory"

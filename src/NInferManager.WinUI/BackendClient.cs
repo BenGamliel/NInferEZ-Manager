@@ -90,6 +90,22 @@ public sealed class BackendClient : IDisposable
     }
 
     public Task<ManagerStatus?> StatusAsync() => GetAsync<ManagerStatus>("/control/v1/status");
+    public async Task<ConversionCapabilities?> ConversionCapabilitiesAsync()
+    {
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(100));
+        using var response=await _http.GetAsync("/control/v1/converter/capabilities",deadline.Token);
+        await CheckAsync(response);
+        return await response.Content.ReadFromJsonAsync<ConversionCapabilities>(_json,deadline.Token);
+    }
+    public Task<ConversionStatus?> ConversionStatusAsync()=>GetAsync<ConversionStatus>("/control/v1/converter/status");
+    public async Task StartConversionAsync(string command,ConversionRequest value)
+    {
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);deadline.CancelAfter(TimeSpan.FromSeconds(15));
+        using var response=await _http.PostAsJsonAsync("/control/v1/converter/"+command,value,_json,deadline.Token);
+        await CheckAsync(response);
+    }
+    public async Task CancelConversionAsync()=>await SendAsync(HttpMethod.Post,"/control/v1/converter/cancel");
     public async Task<List<ModelInfo>> ModelsAsync() => await GetAsync<List<ModelInfo>>("/control/v1/models") ?? [];
     public Task<ManagerSettings?> SettingsAsync() => GetAsync<ManagerSettings>("/control/v1/settings");
     public async Task<ManagerSettings?> PatchSettingsAsync(long revision, object changes)
@@ -122,6 +138,8 @@ public sealed class BackendClient : IDisposable
     public Task<ApiResult?> SetModelAliasAsync(string file, string? alias) => SendAsync(HttpMethod.Put, "/control/v1/models/" + Uri.EscapeDataString(file) + "/alias", new { alias });
     public async Task DeleteAsync(string file) => await SendAsync(HttpMethod.Delete, "/control/v1/models/" + Uri.EscapeDataString(file));
     public async Task RefreshCatalogAsync() => await SendAsync(HttpMethod.Post, "/control/v1/catalog/refresh");
+    public Task<CatalogNotificationSnapshot?> ModelNotificationsAsync()=>GetAsync<CatalogNotificationSnapshot>("/control/v1/catalog/notifications");
+    public async Task DismissModelNotificationsAsync(IEnumerable<string> identities)=>await SendAsync(HttpMethod.Post,"/control/v1/catalog/notifications/dismiss",new DismissModelAnnouncementsRequest(identities.ToArray()));
     public Task<RequestMetricsSnapshot?> RequestsAsync() => GetAsync<RequestMetricsSnapshot>("/control/v1/requests");
     private async Task<string> GetTextAsync(string route){using var deadline=CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);deadline.CancelAfter(TimeSpan.FromSeconds(15));using var response=await _http.GetAsync(route,deadline.Token);await CheckAsync(response);return await response.Content.ReadAsStringAsync(deadline.Token);}
     public Task<string> LogsAsync()=>GetTextAsync("/control/v1/logs");

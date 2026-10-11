@@ -1,4 +1,4 @@
-# NInferEZ Manager 0.0.1 — user guide
+# NInferEZ Manager 1.0.0 — user guide
 
 ## Start with a model, not a terminal
 

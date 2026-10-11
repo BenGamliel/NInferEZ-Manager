@@ -2,7 +2,7 @@ param([Parameter(Mandatory=$true)][string]$Path)
 
 $ErrorActionPreference = "Stop"
 $resolved = (Resolve-Path -LiteralPath $Path).Path
-$forbiddenText = @('C:\Users\','D:\space\','github_pat_','ghp_','hf_','Bearer eyJ')
+$forbiddenText = @('C:\Users\','D:\space\','github_pat_','ghp_','Bearer eyJ')
 $textExtensions = @('.txt','.json','.xml','.config','.md','.ps1','.cmd','.bat','.yml','.yaml','.toml','.ini','.log')
 $forbiddenNames = @('settings.json','catalog.cache.json','manager.log','NInferEZ-Manager-crash.txt')
 $hits = [Collections.Generic.List[string]]::new()
@@ -13,10 +13,17 @@ Get-ChildItem -LiteralPath $resolved -File -Recurse | ForEach-Object {
         $hits.Add("Runtime/user artifact: $($file.FullName)")
     }
     if ($textExtensions -contains $file.Extension) {
+        $content = Get-Content -LiteralPath $file.FullName -Raw
+        if ($file.FullName.EndsWith('Converter\runtime\python\Lib\venv\scripts\common\Activate.ps1', [StringComparison]::OrdinalIgnoreCase)) {
+            $content = $content.Replace('C:\Users\MyUser\Common\.venv','<standard-library-example>')
+        }
         foreach ($pattern in $forbiddenText) {
-            if (Select-String -LiteralPath $file.FullName -Pattern $pattern -SimpleMatch -Quiet -ErrorAction SilentlyContinue) {
+            if ($content -and $content.Contains($pattern, [StringComparison]::OrdinalIgnoreCase)) {
                 $hits.Add("Private text '$pattern': $($file.FullName)")
             }
+        }
+        if ($content -match '\bhf_[A-Za-z0-9]{12,}\b') {
+            $hits.Add("Potential download credential: $($file.FullName)")
         }
     }
 }

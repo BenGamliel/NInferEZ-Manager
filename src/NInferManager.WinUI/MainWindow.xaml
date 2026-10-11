@@ -45,6 +45,7 @@
                 <StackPanel x:Name="SidebarMenu" Grid.Row="1">
                     <Button x:Name="DashboardNavButton" Tag="dashboard" Click="SidebarNav_Click" Style="{StaticResource SidebarNavButtonStyle}" ToolTipService.ToolTip="Overview"><StackPanel Orientation="Horizontal" Spacing="14"><FontIcon Glyph="&#xE80F;" Width="20" /><TextBlock x:Name="DashboardNavLabel" Text="Overview" VerticalAlignment="Center" /></StackPanel></Button>
                     <Button x:Name="ModelsNavButton" Tag="models" Click="SidebarNav_Click" Style="{StaticResource SidebarNavButtonStyle}" ToolTipService.ToolTip="Models"><StackPanel Orientation="Horizontal" Spacing="14"><FontIcon Glyph="&#xE8B7;" Width="20" /><TextBlock x:Name="ModelsNavLabel" Text="Models" VerticalAlignment="Center" /></StackPanel></Button>
+                    <Button x:Name="ConverterNavButton" Tag="converter" Click="SidebarNav_Click" Style="{StaticResource SidebarNavButtonStyle}" ToolTipService.ToolTip="Converter"><StackPanel Orientation="Horizontal" Spacing="14"><FontIcon Glyph="&#xE8AB;" Width="20" /><TextBlock x:Name="ConverterNavLabel" Text="Converter" VerticalAlignment="Center" /></StackPanel></Button>
                     <Button x:Name="RequestsNavButton" Tag="requests" Click="SidebarNav_Click" Style="{StaticResource SidebarNavButtonStyle}" ToolTipService.ToolTip="Requests"><StackPanel Orientation="Horizontal" Spacing="14"><FontIcon Glyph="&#xE9D2;" Width="20" /><TextBlock x:Name="RequestsNavLabel" Text="Requests" VerticalAlignment="Center" /></StackPanel></Button>
                     <Button x:Name="LogsNavButton" Tag="logs" Click="SidebarNav_Click" Style="{StaticResource SidebarNavButtonStyle}" ToolTipService.ToolTip="Logs"><StackPanel Orientation="Horizontal" Spacing="14"><FontIcon Glyph="&#xE9D5;" Width="20" /><TextBlock x:Name="LogsNavLabel" Text="Logs" VerticalAlignment="Center" /></StackPanel></Button>
                     <Button x:Name="EngineNavButton" Tag="engine" Click="SidebarNav_Click" Style="{StaticResource SidebarNavButtonStyle}" ToolTipService.ToolTip="Engine"><StackPanel Orientation="Horizontal" Spacing="14"><FontIcon Glyph="&#xE950;" Width="20" /><TextBlock x:Name="EngineNavLabel" Text="Engine" VerticalAlignment="Center" /></StackPanel></Button>
@@ -297,6 +298,14 @@
                                                     <TextBlock Text="{Binding PresetText}" Style="{StaticResource CaptionStyle}" />
                                                     <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="API" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding ApiName}" FontFamily="Consolas" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="430" /></StackPanel>
                                                     <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="{Binding Weights}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding SizeText}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="VISION" Foreground="{ThemeResource AccentBrush}" FontSize="10" Visibility="{Binding VisionVisibility}" /></StackPanel>
+<Border Visibility="{Binding MemoryFitVisibility}" HorizontalAlignment="Left" Background="{ThemeResource SurfaceAltBrush}" CornerRadius="7" Padding="8,5" Margin="0,3,0,0">
+    <ToolTipService.ToolTip><ToolTip MaxWidth="340"><TextBlock Text="{Binding MemoryFitHelp}" TextWrapping="Wrap" /></ToolTip></ToolTipService.ToolTip>
+    <Grid>
+        <TextBlock Text="{Binding MemoryFitText}" Visibility="{Binding FitGreen}" Foreground="{ThemeResource FitComfortableBrush}" FontSize="12" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding MemoryFitText}" Visibility="{Binding FitAmber}" Foreground="{ThemeResource FitCloseBrush}" FontSize="12" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding MemoryFitText}" Visibility="{Binding FitRed}" Foreground="{ThemeResource FitExceedsBrush}" FontSize="12" FontWeight="SemiBold" />
+    </Grid>
+</Border>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" Tag="card-actions" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
                                                     <Button Click="EditModelApiName_Click" Tag="{Binding FileName}" Visibility="{Binding InstalledVisibility}" ToolTipService.ToolTip="Edit API model name" AutomationProperties.Name="Edit API model name"><FontIcon Glyph="&#xE70F;" FontSize="13" /></Button>
@@ -332,8 +341,19 @@
                                     <DataTemplate>
                                         <Border Style="{StaticResource CardStyle}" Padding="18">
                                             <Grid ColumnSpacing="16" RowSpacing="12" SizeChanged="RecommendationCardGrid_SizeChanged"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                                                <StackPanel Spacing="5"><TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitleStyle}" TextWrapping="Wrap" /><StackPanel Orientation="Horizontal" Spacing="8"><Border Style="{StaticResource PillStyle}" Visibility="{Binding NewVisibility}"><TextBlock Text="NEW" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" /></Border><Border Style="{StaticResource PillStyle}" Visibility="{Binding InstalledVisibility}"><TextBlock Text="INSTALLED" FontSize="11" /></Border></StackPanel><TextBlock Text="{Binding Weights}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding SizeText}" Style="{StaticResource CaptionStyle}" /></StackPanel>
-                                                <StackPanel Grid.Column="1" Tag="card-actions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Content="Hugging Face" Click="OpenModelCard_Click" Tag="{Binding ModelCardUrl}" /><Button Content="Download" Click="DownloadModel_Click" Tag="{Binding FileName}" Visibility="{Binding DownloadVisibility}" Style="{StaticResource ManagerPrimaryButtonStyle}" /><Button Content="•••" Visibility="{Binding NewVisibility}" ToolTipService.ToolTip="New model actions" AutomationProperties.Name="New model actions"><Button.Flyout><MenuFlyout><MenuFlyoutItem Text="Mark as seen" Click="MarkModelSeen_Click" Tag="{Binding FileName}" /></MenuFlyout></Button.Flyout></Button></StackPanel>
+                                                <StackPanel Spacing="5">
+                                                    <TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitleStyle}" TextWrapping="Wrap" />
+                                                    <ComboBox Header="Version" ItemsSource="{Binding Variants}" DisplayMemberPath="VariantLabel" SelectedItem="{Binding SelectedVariant, Mode=TwoWay}" Visibility="{Binding VariantSelectorVisibility}" HorizontalAlignment="Left" MinWidth="190" MaxWidth="320" Margin="0,5,0,5" AutomationProperties.Name="Recommended model version" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="8"><Border Style="{StaticResource PillStyle}" Visibility="{Binding SelectedVariant.NewVisibility}"><TextBlock Text="NEW" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" /></Border><Border Style="{StaticResource PillStyle}" Visibility="{Binding SelectedVariant.InstalledVisibility}"><TextBlock Text="INSTALLED" FontSize="11" /></Border></StackPanel>
+                                                    <TextBlock Text="{Binding SelectedVariant.Weights}" Style="{StaticResource CaptionStyle}" /><TextBlock Text="{Binding SelectedVariant.SizeText}" Style="{StaticResource CaptionStyle}" /><Border Visibility="{Binding SelectedVariant.MemoryFitVisibility}" HorizontalAlignment="Left" Background="{ThemeResource SurfaceAltBrush}" CornerRadius="7" Padding="8,5" Margin="0,3,0,0">
+    <ToolTipService.ToolTip><ToolTip MaxWidth="340"><TextBlock Text="{Binding SelectedVariant.MemoryFitHelp}" TextWrapping="Wrap" /></ToolTip></ToolTipService.ToolTip>
+    <Grid>
+        <TextBlock Text="{Binding SelectedVariant.MemoryFitText}" Visibility="{Binding SelectedVariant.FitGreen}" Foreground="{ThemeResource FitComfortableBrush}" FontSize="12" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding SelectedVariant.MemoryFitText}" Visibility="{Binding SelectedVariant.FitAmber}" Foreground="{ThemeResource FitCloseBrush}" FontSize="12" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding SelectedVariant.MemoryFitText}" Visibility="{Binding SelectedVariant.FitRed}" Foreground="{ThemeResource FitExceedsBrush}" FontSize="12" FontWeight="SemiBold" />
+    </Grid>
+</Border></StackPanel>
+                                                <StackPanel Grid.Column="1" Tag="card-actions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Content="Hugging Face" Click="OpenModelCard_Click" Tag="{Binding SelectedVariant.ModelCardUrl}" /><Button Content="Download" Click="DownloadModel_Click" Tag="{Binding SelectedVariant.FileName}" Visibility="{Binding SelectedVariant.DownloadVisibility}" Style="{StaticResource ManagerPrimaryButtonStyle}" /><Button Content="•••" Visibility="{Binding SelectedVariant.NewVisibility}" ToolTipService.ToolTip="Model announcement actions" AutomationProperties.Name="Model announcement actions"><Button.Flyout><MenuFlyout><MenuFlyoutItem Text="Dismiss announcement" Click="MarkModelSeen_Click" Tag="{Binding SelectedVariant.FileName}" /></MenuFlyout></Button.Flyout></Button></StackPanel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -343,6 +363,103 @@
                         </StackPanel>
                     </ScrollViewer>
 
+                    <ScrollViewer x:Name="ConverterPage" Visibility="Collapsed" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="34,30,34,34" Spacing="18">
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="PREPARE YOUR MODEL" Style="{StaticResource EyebrowStyle}" />
+                                <TextBlock Text="Converter" Style="{StaticResource PageTitleStyle}" />
+                                <TextBlock Text="Turn a supported checkpoint into a model for NInfer. Your source is kept unchanged." Style="{StaticResource MutedStyle}" TextWrapping="Wrap" />
+                                <HyperlinkButton Content="Conversion guide &amp; supported models" IsEnabled="False" HorizontalAlignment="Left" Padding="0,8" ToolTipService.ToolTip="The guide link will be added soon." />
+                            </StackPanel>
+                            <InfoBar x:Name="ConverterInfo" IsOpen="False" IsClosable="True" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ToggleButton x:Name="ConverterWizardMode" Content="Guided wizard" IsChecked="True" Click="ConverterMode_Click" />
+                                <ToggleButton x:Name="ConverterManualMode" Content="Manual setup" Click="ConverterMode_Click" />
+                                <Button Content="Import request" Click="ConverterImport_Click" />
+                                <Button Content="Export request" Click="ConverterExport_Click" />
+                            </StackPanel>
+                            <TextBlock x:Name="ConverterStepText" Text="1 · Source   /   2 · Required files   /   3 · Options   /   4 · Review" Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                            <Border x:Name="ConverterSourceCard" Style="{StaticResource CardStyle}">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="1 · Choose your source" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock Text="Safetensors checkpoint or folder · GGUF with matching config/tokenizer · NInfer entry file" Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><Button x:Name="ConverterFileButton" Content="Choose file" Click="ConverterFile_Click" /><Button x:Name="ConverterFolderButton" Content="Choose checkpoint folder" Click="ConverterFolder_Click" /></StackPanel>
+                                    <TextBox x:Name="ConverterSourceBox" Header="Source" PlaceholderText="Choose a file or paste its full path" TextChanged="ConverterInput_Changed" />
+                                    <TextBlock x:Name="ConverterSourceHint" Text="Auto detects supported architecture and weight encoding during the compatibility check." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                    <TextBox x:Name="ConverterConfigBox" Header="Matching config/tokenizer folder (GGUF)" PlaceholderText="Detected beside the source when available" TextChanged="ConverterInput_Changed" />
+                                    <Button x:Name="ConverterConfigButton" Content="Choose matching resources folder" Click="ConverterConfig_Click" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="ConverterResourcesCard" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="Required files" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock x:Name="ConverterDiscoveryText" Text="The wizard reads model headers and lists any missing matching resources here." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                    <StackPanel x:Name="ConverterRequirementsPanel" Spacing="12" />
+                                    <Expander Header="Individual configuration, tokenizer &amp; processor files" HorizontalAlignment="Stretch"><StackPanel x:Name="ConverterResourcesPanel" Spacing="10" Padding="0,12" /></Expander>
+                                    <Expander Header="Missing shard replacements" HorizontalAlignment="Stretch"><StackPanel Spacing="8" Padding="0,12"><TextBlock Text="The wizard fills this map when you attach a missing shard. Manual entries map the expected absolute shard path to its actual file." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" /><TextBox x:Name="ConverterShardsBox" Text="{}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" Header="Shard replacements (JSON)" TextChanged="ConverterInput_Changed" /></StackPanel></Expander>
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="ConverterOptionsCard" Style="{StaticResource CardStyle}" Visibility="Collapsed"><StackPanel Spacing="14"><TextBlock Text="Choose a conversion" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="These are actual plans prepared by the converter. Encoded weight size is not total VRAM. No option is selected for you." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" /><StackPanel x:Name="ConverterOptionsPanel" Spacing="12" /></StackPanel></Border>
+                            <Border x:Name="ConverterOutputCard" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="2 · Choose the output" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBox x:Name="ConverterOutputBox" Header="New .ninfer file" TextChanged="ConverterInput_Changed" />
+                                    <Button x:Name="ConverterOutputButton" Content="Choose output folder" HorizontalAlignment="Left" Click="ConverterOutput_Click" />
+                                    <ComboBox x:Name="ConverterProfilePicker" Header="Output profile" HorizontalAlignment="Stretch" SelectionChanged="ConverterInput_Changed">
+                                        <ComboBoxItem Content="Auto · detect the appropriate conversion" Tag="auto" />
+                                    </ComboBox>
+                                    <TextBlock x:Name="ConverterProfileHint" Text="Auto preserves supported encoded weights where possible. Other sources may be re-quantized; review the conversion plan." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="ConverterAdvancedCard" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                                <StackPanel Spacing="14">
+                                    <Expander x:Name="ConverterAdvanced" Header="Advanced conversion options" HorizontalAlignment="Stretch">
+                                        <StackPanel Spacing="16" Padding="0,12">
+                                            <TextBlock Text="Optional components" Style="{StaticResource SectionTitleStyle}" />
+                                            <TextBlock Text="Text is always included. Add only components present in the source or supplied by a matching companion. NInfer repacking keeps its existing components." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                            <StackPanel x:Name="ConverterComponentPanel" Spacing="6" />
+                                            <TextBlock Text="Companion sources" Style="{StaticResource SectionTitleStyle}" />
+                                            <StackPanel x:Name="ConverterSourcesPanel" Spacing="10" />
+                                            <TextBox x:Name="ConverterExtraSourcesBox" Text="{}" Header="Additional named sources (JSON)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="65" TextChanged="ConverterInput_Changed" ToolTipService.ToolTip="Use the source names required by your recipe, with matching file or checkpoint folder paths." />
+                                            <TextBlock Text="Recipe &amp; resources" Style="{StaticResource SectionTitleStyle}" />
+                                            <ComboBox x:Name="ConverterRecipePicker" Header="Built-in recipe (Recipe profile only)" HorizontalAlignment="Stretch" SelectionChanged="ConverterInput_Changed" />
+                                            <TextBox x:Name="ConverterCustomRecipeBox" Header="Custom Python recipe (optional)" PlaceholderText="FILE.py or FILE.py:function" TextChanged="ConverterInput_Changed" />
+                                            <TextBox x:Name="ConverterOverrideBox" Header="Python recipe override (optional)" TextChanged="ConverterInput_Changed" />
+                                            <CheckBox x:Name="ConverterTrustCodeBox" Content="I trust these Python recipes to run with my file access" Checked="ConverterInput_Changed" Unchecked="ConverterInput_Changed" />
+                                            <TextBox x:Name="ConverterTemplateBox" Header="Chat template override (optional file path)" TextChanged="ConverterInput_Changed" />
+                                            <TextBox x:Name="ConverterNameBox" Header="Public model name in the output (optional)" TextChanged="ConverterInput_Changed" />
+                                            <TextBlock Text="Memory &amp; file layout" Style="{StaticResource SectionTitleStyle}" />
+                                            <NumberBox x:Name="ConverterRowsBox" Header="Rows per conversion chunk" Value="512" Minimum="1" Maximum="65536" SpinButtonPlacementMode="Compact" ValueChanged="ConverterNumber_Changed" ToolTipService.ToolTip="Smaller chunks reduce peak RAM usage. This does not change model quality." />
+                                            <ComboBox x:Name="ConverterDevicePicker" Header="Conversion device" HorizontalAlignment="Stretch" SelectionChanged="ConverterInput_Changed" />
+                                            <NumberBox x:Name="ConverterShardBox" Header="Maximum shard size (GB, decimal)" Value="32" Minimum="0.001" Maximum="10000" SpinButtonPlacementMode="Compact" ValueChanged="ConverterNumber_Changed" ToolTipService.ToolTip="Large outputs are split into shards. Keep all output files together." />
+                                            <TextBlock Text="Proposal head" Style="{StaticResource SectionTitleStyle}" />
+                                            <CheckBox x:Name="ConverterProposalBox" Content="Add the converter's official proposal head" Checked="ConverterInput_Changed" Unchecked="ConverterInput_Changed" />
+                                            <NumberBox x:Name="ConverterProposalRowsBox" Header="Proposal rows" Value="131072" Minimum="1" Maximum="10000000" SpinButtonPlacementMode="Compact" ValueChanged="ConverterNumber_Changed" />
+                                            <TextBox x:Name="ConverterRankingBox" Header="Replacement token ranking (optional file path)" TextChanged="ConverterInput_Changed" />
+                                            <Expander Header="Per-weight encoding assignments" HorizontalAlignment="Stretch"><StackPanel Spacing="10" Padding="0,12"><TextBlock Text="Applied after the profile, proposal head and Python override. Use a parameter name or wildcard, for example text/layers/*/mlp/down. The planner rejects unsupported formats and shapes." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" /><StackPanel x:Name="ConverterAssignmentsPanel" Spacing="12" /><Button x:Name="ConverterAssignmentAddButton" Content="Add assignment" Click="ConverterAssignmentAdd_Click" HorizontalAlignment="Left" /></StackPanel></Expander>
+                                            <TextBlock Text="Optional GPU verification" Style="{StaticResource SectionTitleStyle}" />
+                                            <TextBox x:Name="ConverterValidateBox" Header="Test with matching ninfer-serve.exe (optional)" PlaceholderText="Blank = structural validation only; no GPU load" TextChanged="ConverterInput_Changed" />
+                                            <NumberBox x:Name="ConverterValidateTimeoutBox" Header="Engine test timeout (seconds)" Value="600" Minimum="1" Maximum="86400" SpinButtonPlacementMode="Compact" ValueChanged="ConverterNumber_Changed" />
+                                            <TextBlock Text="This starts a real text inference test before publishing. Requires compatible hardware and free VRAM; it does not verify every Vision or speculative workload." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Expander>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="3 · Check &amp; convert" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock Text="Runs locally on CPU. Large sources can use substantial RAM, disk space and time. The converter stays idle until you ask it to check or convert." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><Button x:Name="ConverterBackButton" Content="Back" Click="ConverterBack_Click" Visibility="Collapsed" /><Button x:Name="ConverterNextButton" Content="Check model" Click="ConverterNext_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" /><Button x:Name="ConverterCheckButton" Content="Check &amp; preview" Click="ConverterCheck_Click" IsEnabled="False" Visibility="Collapsed" /><Button x:Name="ConverterRunButton" Content="Convert model" Click="ConverterRun_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" IsEnabled="False" Visibility="Collapsed" /><Button x:Name="ConverterCancelButton" Content="Cancel" Click="ConverterCancel_Click" Visibility="Collapsed" /></StackPanel>
+                                    <ProgressBar x:Name="ConverterProgress" IsIndeterminate="True" Visibility="Collapsed" />
+                                    <TextBlock x:Name="ConverterStatusText" Text="Choose a source and output to begin." TextWrapping="Wrap" />
+                                    <TextBlock x:Name="ConverterPlanText" Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                    <Expander Header="Inspect weight plan" HorizontalAlignment="Stretch"><StackPanel Spacing="10" Padding="0,12"><TextBox x:Name="ConverterWeightFilter" Header="Filter parameter or encoding" TextChanged="ConverterWeightFilter_Changed" /><ListView x:Name="ConverterWeightList" MaxHeight="320" SelectionMode="None" /></StackPanel></Expander>
+                                    <Button x:Name="ConverterAddButton" Content="Add converted model to library" Click="ConverterAdd_Click" Visibility="Collapsed" HorizontalAlignment="Left" />
+                                    <TextBlock Text="A successful structural check is not a guarantee of GPU support. Use a matching engine and model profile." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
                     <ScrollViewer x:Name="RequestsPage" Visibility="Collapsed">
                         <StackPanel Padding="34,30,34,60" Spacing="15" MaxWidth="1420" HorizontalAlignment="Stretch">
                             <Grid ColumnSpacing="15">
@@ -485,23 +602,25 @@
                                             <StackPanel Spacing="15">
                                                 <StackPanel Spacing="5"><TextBlock Text="Inference profile" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="Quality, context and acceleration settings for the selected model." Style="{StaticResource CaptionStyle}" /></StackPanel>
                                                 <Border Height="1" Background="{ThemeResource BorderSoftBrush}" />
-                                                <CheckBox x:Name="AutoContextBox" Content="Estimate context for available VRAM" />
-                                                <TextBlock Text="Auto uses the calibrated model profile and keeps a memory reserve. For an unknown artifact, turn Auto off and choose a conservative explicit limit. It does not change KV precision or weights." Style="{StaticResource CaptionStyle}" />
+                                                <CheckBox x:Name="ManageAdvancedBox" Content="Manage advanced settings for me" Checked="Management_Changed" Unchecked="Management_Changed" />
+                                                <TextBlock x:Name="ManagementHint" Text="Recommended: dependent controls follow your choices. Turn off to restore your last manual advanced settings." Style="{StaticResource CaptionStyle}" />
+                                                <TextBlock Text="Context and memory" Style="{StaticResource CardTitleStyle}" />
+                                                <CheckBox x:Name="AutoContextBox" Content="Fit the context cache to available VRAM" Checked="BasicProfile_Changed" Unchecked="BasicProfile_Changed" />
+                                                <TextBlock Text="Managed mode asks the engine to fit its cache after loading the weights. Your chosen KV quality stays unchanged. Manual mode uses the catalog estimate, which may not fit every GPU." Style="{StaticResource CaptionStyle}" />
                                                 <Grid ColumnSpacing="12" RowSpacing="12">
                                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                                                     <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
-                                                    <StackPanel Spacing="5"><TextBlock Text="Maximum context" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="ContextBox" Minimum="1024" Maximum="524288" SpinButtonPlacementMode="Compact" /></StackPanel>
-                                                    <StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="Prefill chunk" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="PrefillBox" Minimum="128" Maximum="65536" SpinButtonPlacementMode="Compact" /></StackPanel>
-                                                    <StackPanel Grid.Row="1" Spacing="5"><TextBlock Text="KV precision" Style="{StaticResource CaptionStyle}" /><ComboBox x:Name="KvBox"><ComboBoxItem Content="BF16" /><ComboBoxItem Content="INT8" /><ComboBoxItem Content="FP8" /><ComboBoxItem Content="NVFP4" /><ComboBoxItem Content="K8V4" /><ComboBoxItem Content="RK8V4" /></ComboBox></StackPanel>
-                                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="5"><TextBlock Text="Speculative mode" Style="{StaticResource CaptionStyle}" /><ComboBox x:Name="SpecBox" DisplayMemberPath="Label" SelectionChanged="SpeculativeMode_Changed" AutomationProperties.Name="Speculative mode" /><TextBlock x:Name="SpecCapabilityText" Style="{StaticResource CaptionStyle}" /></StackPanel>
+                                                    <StackPanel Spacing="5"><TextBlock Text="Context limit (tokens)" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="ContextBox" Minimum="1024" Maximum="524288" SpinButtonPlacementMode="Compact" ValueChanged="BasicProfileNumber_Changed" /></StackPanel>
+                                                    <StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="Context cache quality" Style="{StaticResource CaptionStyle}" /><ComboBox x:Name="KvBox" SelectionChanged="BasicProfileSelection_Changed"><ComboBoxItem Content="BF16" /><ComboBoxItem Content="INT8" /><ComboBoxItem Content="FP8" /><ComboBoxItem Content="NVFP4" /><ComboBoxItem Content="K8V4" /><ComboBoxItem Content="RK8V4" /></ComboBox></StackPanel>
+                                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="5"><TextBlock Text="Generation acceleration" Style="{StaticResource CaptionStyle}" /><ComboBox x:Name="SpecBox" DisplayMemberPath="Label" SelectionChanged="SpeculativeMode_Changed" AutomationProperties.Name="Generation acceleration" /><TextBlock x:Name="SpecCapabilityText" Style="{StaticResource CaptionStyle}" /></StackPanel>
                                                 </Grid>
-                                                <StackPanel x:Name="VisionCapabilityPanel" Spacing="4"><CheckBox x:Name="VisionBox" Content="Enable image input" /><TextBlock Text="Available only when both the model and engine support Vision." Style="{StaticResource CaptionStyle}" /></StackPanel>
+                                                <StackPanel x:Name="VisionCapabilityPanel" Spacing="4"><CheckBox x:Name="VisionBox" Content="Enable image input" Checked="BasicProfile_Changed" Unchecked="BasicProfile_Changed" /><TextBlock Text="Available only when both the model and engine support Vision." Style="{StaticResource CaptionStyle}" /></StackPanel>
                                                 <StackPanel Orientation="Horizontal" Spacing="9"><Button Content="Save profile" Click="SaveSettings_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" /><Button Content="Restore recommended defaults" Click="RestoreProfile_Click" /></StackPanel>
                                             </StackPanel>
                                         </Border>
 
                                         <Expander Header="Advanced engine controls">
-                                            <Border Style="{StaticResource CardStyle}" Margin="0,10,0,0"><StackPanel Spacing="14"><TextBlock Text="These launch settings can affect stability, quality and memory. Save profile above after editing. Acceleration choices follow inspected artifact components; unknown metadata is marked explicitly. KV choices still require a compatible engine and GPU." Style="{StaticResource CaptionStyle}" /><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions><StackPanel x:Name="DraftControlsPanel" Spacing="5"><TextBlock Text="Draft tokens" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="DraftBox" Minimum="1" Maximum="15" SpinButtonPlacementMode="Compact" /></StackPanel><StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="Active requests" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="ConcurrencyBox" Minimum="1" Maximum="1" Value="1" IsEnabled="False" /></StackPanel></Grid><CheckBox x:Name="CudaBox" Content="CUDA graphs" /><CheckBox x:Name="PrefixBox" Content="Prefix reuse" /><StackPanel x:Name="AdvancedProfilePanel" Spacing="12" /><Button Content="Copy default model launch command" Click="CopyCommand_Click" HorizontalAlignment="Left" /></StackPanel></Border>
+                                            <Border Style="{StaticResource CardStyle}" Margin="0,10,0,0"><StackPanel Spacing="14"><TextBlock Text="Managed controls are read-only. Turn off 'Manage advanced settings for me' to restore and edit your manual setup. Grey controls do not apply to the current selection. Hover over ? for a short explanation. Save profile after editing." Style="{StaticResource CaptionStyle}" /><Grid ColumnSpacing="12" RowSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions><StackPanel x:Name="DraftControlsPanel" Spacing="5"><TextBlock Text="Draft tokens" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="DraftBox" Minimum="1" Maximum="15" SpinButtonPlacementMode="Compact" /></StackPanel><StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="Active requests" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="ConcurrencyBox" Minimum="1" Maximum="1" Value="1" IsEnabled="False" /></StackPanel><StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="5"><TextBlock Text="Prompt processing batch" Style="{StaticResource CaptionStyle}" /><NumberBox x:Name="PrefillBox" Minimum="128" Maximum="65536" SpinButtonPlacementMode="Compact" /></StackPanel></Grid><CheckBox x:Name="CudaBox" Content="CUDA graphs" /><CheckBox x:Name="PrefixBox" Content="Reuse previous prompt prefixes" /><StackPanel x:Name="AdvancedProfilePanel" Spacing="12" /><Button Content="Save profile" Click="SaveSettings_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" HorizontalAlignment="Left" /><Button Content="Copy saved default model launch command" Click="CopyCommand_Click" HorizontalAlignment="Left" /></StackPanel></Border>
                                         </Expander>
                                     </StackPanel>
                                 </StackPanel>

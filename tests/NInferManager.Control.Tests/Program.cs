@@ -65,6 +65,11 @@ try
         Check(!string.IsNullOrEmpty(health.RootElement.GetProperty("instanceId").GetString()), "session instance identity");
     }
     await Expect(anonymous, HttpMethod.Get, "/control/v1/health", null, 401, "control health requires session token");
+    await Expect(anonymous,HttpMethod.Get,"/control/v1/converter/status",null,401,"converter control is private and authenticated");
+    using(var conversion=await Json(control,"/control/v1/converter/status"))
+        Check(!conversion.RootElement.GetProperty("running").GetBoolean(),"converter API starts idle without runtime or GPU loading");
+    await Expect(control,HttpMethod.Post,"/control/v1/converter/check","""{"source":"","output":"missing.ninfer"}""",400,"converter invalid input has actionable400");
+    await Expect(control,HttpMethod.Post,"/control/v1/converter/cancel","{}",409,"converter cancel reports no active job rather than an internal error");
     anonymous.DefaultRequestHeaders.Add(ControlAuthentication.Header, new string('0', 64));
     await Expect(anonymous, HttpMethod.Get, "/control/v1/settings", null, 401, "wrong control token is rejected");
     await Expect(anonymous, HttpMethod.Post, "/control/v1/api/state", "{\"enabled\":false}", 401, "unauthorized mutation is rejected");
@@ -76,17 +81,24 @@ try
     using (var health = await Json(api, "/health"))
         Check(health.RootElement.GetProperty("engine").GetString() == "Unloaded", "metadata calls do not load an engine");
     using var library = await Json(control, "/control/v1/models");
+    using(var notices=await Json(control,"/control/v1/catalog/notifications"))
+        Check(notices.RootElement.TryGetProperty("pending",out var pending)&&pending.ValueKind==JsonValueKind.Array&&notices.RootElement.GetProperty("startupCheckComplete").GetBoolean(),"catalog notification API is ready without a model or GPU load");
+    await Expect(control,HttpMethod.Post,"/control/v1/catalog/notifications/dismiss","{\"identities\":[\"unknown\"]}",400,"unknown model announcement acknowledgement is rejected");
     var fixture = library.RootElement.EnumerateArray().Single(x => x.GetProperty("fileName").GetString() == "fixture.ninfer");
     var badPreset = library.RootElement.EnumerateArray().Single(x => x.GetProperty("fileName").GetString() == "bad-preset.ninfer");
     Check(badPreset.GetProperty("presetStatus").GetString()?.Contains("could not be imported") == true,
         "malformed adjacent preset is isolated to its model and does not prevent backend startup");
     var file = Uri.EscapeDataString(fixture.GetProperty("fileName").GetString()!);
+    await Expect(control, HttpMethod.Post, $"/control/v1/models/{file}/download", null, 200, "already installed artifact never starts another download");
+    using(var download=await Json(control,"/control/v1/download"))
+        Check(download.RootElement.ValueKind==JsonValueKind.Null||!download.RootElement.GetProperty("running").GetBoolean(),"installed variant download action leaves downloader idle");
     var modelInfo = fixture.Deserialize<ModelInfo>(SettingsService.JsonOptions)!;
     var reported = modelInfo with { Inspected=true, HasMtp=false, HasDflash=false, HasDflash2=true };
     var supportedChoices = SpeculativeChoices.ForModel(reported, SpeculativeMode.Disabled);
     Check(supportedChoices.Select(x=>x.Mode).SequenceEqual([SpeculativeMode.Disabled,SpeculativeMode.Dflash2]), "UI choices contain only artifact-supported speculation modes");
     var exactChoices = SpeculativeChoices.ForModel(reported,SpeculativeMode.Mtp);
     Check(exactChoices.Any(x=>x.Mode==SpeculativeMode.Mtp && !x.ConfirmedSupported && x.Label.Contains("unsupported")), "unsupported exact mode is retained with a warning rather than silently changed");
+    Check(SpeculativeChoices.ForModel(reported,SpeculativeMode.Mtp,true).All(x=>x.ConfirmedSupported), "managed UI does not offer an inspected unsupported acceleration mode");
     var unknown = modelInfo with { Inspected=false };
     Check(SpeculativeChoices.ForModel(unknown,SpeculativeMode.Disabled).Count==1, "unknown artifact does not advertise unverified speculation choices");
     Check(SpeculativeChoices.ForModel(unknown,SpeculativeMode.Dflash2).Any(x=>x.Mode==SpeculativeMode.Dflash2 && !x.ConfirmedSupported && x.Label.Contains("unknown")), "unknown current mode remains explicit and unverified");

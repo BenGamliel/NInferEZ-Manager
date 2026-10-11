@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.0.1",
+    [string]$Version = "1.0.0",
     [string]$BuildId = "final",
     [string]$EngineSource = "",
     [switch]$SkipInstaller
@@ -24,7 +24,7 @@ function Copy-ImmutableTree([string]$Source, [string]$Destination) {
         }
     }
 }
-if ($Version -ne '0.0.1') { throw "This development line uses product version 0.0.1. Use BuildId for iterations." }
+if ($Version -ne '1.0.0') { throw "This release line uses product version 1.0.0. Use BuildId for iterations." }
 if ($BuildId -notmatch '^(dev|rc)-\d{3}$|^final$') { throw "BuildId must be dev-NNN, rc-NNN, or final." }
 $engineManifestData = $null
 if (![string]::IsNullOrWhiteSpace($EngineSource)) {
@@ -65,7 +65,7 @@ Copy-Item -LiteralPath (Join-Path $root "docs\MODELS.txt") -Destination (Join-Pa
 Copy-Item -LiteralPath (Join-Path $root "docs\DATA.txt") -Destination (Join-Path $basePayload "Data\README.txt")
 Copy-Item -LiteralPath (Join-Path $root "LICENSE") -Destination (Join-Path $basePayload "Docs\LICENSE.txt")
 Copy-Item -LiteralPath (Join-Path $root "docs\THIRD-PARTY-NOTICES.md") -Destination (Join-Path $basePayload "Docs\THIRD-PARTY-NOTICES.md")
-Copy-Item -LiteralPath (Join-Path $root "docs\RELEASE-NOTES-0.0.1.md") -Destination (Join-Path $basePayload "Docs\RELEASE-NOTES.md")
+Copy-Item -LiteralPath (Join-Path $root "docs\RELEASE-NOTES-1.0.0.md") -Destination (Join-Path $basePayload "Docs\RELEASE-NOTES.md")
 if (Test-Path -LiteralPath (Join-Path $root 'docs\USER-GUIDE.md')) { Copy-Item -LiteralPath (Join-Path $root 'docs\USER-GUIDE.md') -Destination (Join-Path $basePayload 'Docs\USER-GUIDE.md') }
 
 New-Item -ItemType Directory -Path $portableDirectory,$testDirectory | Out-Null

@@ -11,6 +11,10 @@ public sealed class ModelCatalogEntry
     public string Revision { get; set; } = "main";
     public string FileName { get; set; } = "";
     public string RemoteFileName { get; set; } = "";
+    public string FamilyId { get; set; } = "";
+    public string FamilyDisplayName { get; set; } = "";
+    public string VariantName { get; set; } = "";
+    public int VariantOrder { get; set; }
     public string ModelId { get; set; } = "";
     public string Weights { get; set; } = "";
     public long SizeBytes { get; set; }
@@ -31,8 +35,12 @@ public sealed class ModelCatalogEntry
     public double KvMiBPerKToken { get; set; } = 34;
     public bool RecommendedGdnStateFp16 { get; set; }
     public int RecommendedMtpAttentionWindow { get; set; }
+    public int RecommendedNgramDraftTokens { get; set; }
+    public bool RecommendedStructuredOutput { get; set; }
     public bool Featured { get; set; }
     public DateTimeOffset? NewUntilUtc { get; set; }
+    public DateTimeOffset? PublishedAtUtc { get; set; }
+    public DateTimeOffset? FirstSeenUtc { get; set; }
     public string? LocalPath { get; set; }
     public bool Inspected { get; set; }
     public string? InspectionMessage { get; set; }
@@ -52,9 +60,12 @@ public sealed class ModelCatalogEntry
     public string? IgnoredAdjacentPresetFingerprint { get; set; }
     public bool StarterProfile { get; set; }
     public bool YarnSupported { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore] public ModelMemoryGeometry? MemoryGeometry { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore] public (string Path, long Bytes, DateTime WriteUtc)? MemoryMetadataStamp { get; set; }
     public string DownloadUrl => $"https://huggingface.co/{Repository}/resolve/{Revision}/{Uri.EscapeDataString(string.IsNullOrWhiteSpace(RemoteFileName) ? FileName : RemoteFileName)}?download=true";
     public ModelProfile RecommendedProfile() => new()
     {
+        ManageAdvancedSettings = true,
         AutoContext=BaseVramMiB>0,
         VisionEnabled = Vision,
         MaxContext = RecommendedContext,
@@ -67,6 +78,8 @@ public sealed class ModelCatalogEntry
         PrefillChunk = RecommendedPrefillChunk,
         GdnStateFp16 = RecommendedGdnStateFp16,
         MtpAttentionWindow = RecommendedMtpAttentionWindow,
+        NgramDraftTokens = RecommendedNgramDraftTokens,
+        StructuredOutput = RecommendedStructuredOutput,
         DeviceStateSlots = 0,
         HostStateSlots = 0,
         HostKvMiB = 0
@@ -79,11 +92,15 @@ public sealed class ModelCatalog
     private readonly SettingsService _settings;
     private readonly SemaphoreSlim _refreshGate=new(1,1);
     private readonly object _sync=new();
-    private readonly HttpClient _http=new(){Timeout=TimeSpan.FromSeconds(20)};
+    private readonly HttpClient _http;
+    private readonly TimeProvider _time;
+    private long _revision=1;
     private readonly List<ModelCatalogEntry> _entries;
-    public ModelCatalog(AppPaths paths, SettingsService settings)
+    public ModelCatalog(AppPaths paths, SettingsService settings,HttpClient? http=null,TimeProvider? time=null)
     {
         _paths = paths; _settings = settings;
+        _http=http??new(){Timeout=TimeSpan.FromSeconds(20)};
+        _time=time??TimeProvider.System;
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("NInferManager.Backend.Assets.catalog.json")
             ?? throw new InvalidOperationException("Embedded model catalog is missing.");
         _entries = JsonSerializer.Deserialize<List<ModelCatalogEntry>>(stream, SettingsService.JsonOptions) ?? [];
@@ -93,13 +110,25 @@ public sealed class ModelCatalog
             if(File.Exists(_paths.CatalogCacheFile)&&new FileInfo(_paths.CatalogCacheFile).Length<=8*1024*1024)
             {
                 var cache=JsonSerializer.Deserialize<List<ModelCatalogEntry>>(File.ReadAllText(_paths.CatalogCacheFile),SettingsService.JsonOptions);
-                if(cache is {Count:<=4000})foreach(var entry in cache)if(entry is not null&&!string.IsNullOrWhiteSpace(entry.FileName))Merge(entry);
+                if(cache is {Count:<=4000})foreach(var entry in cache)
+                {
+                    if(entry is null||string.IsNullOrWhiteSpace(entry.FileName))continue;
+                    if(entry.DownloadAvailable&&!IsPublisherModel(entry))
+                    {
+                        var present=_settings.Current.ExternalModelPaths.ContainsKey(entry.FileName)
+                            ||File.Exists(entry.LocalPath??Path.Combine(_paths.ModelsDirectory,entry.FileName));
+                        if(!present)continue;
+                        entry.DownloadAvailable=false;entry.Featured=false;entry.NewUntilUtc=null;
+                        entry.Repository="Local file";
+                    }
+                    Merge(entry);
+                }
             }
         }
         catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException){}
         RestoreExternalArtifacts();
         RefreshLocalArtifacts();
-        foreach(var entry in Entries)ValidateCachedInspection(entry);
+        foreach(var entry in Entries){entry.FirstSeenUtc??=_time.GetUtcNow();ValidateCachedInspection(entry);}
         SaveCache();
     }
     public IReadOnlyList<ModelCatalogEntry> Entries { get { lock(_sync)return _entries.ToArray(); } }
@@ -127,9 +156,28 @@ public sealed class ModelCatalog
         lock(_sync)return _entries.Select(e=>
         {
             var installed=IsInstalled(e);
-            return new ModelInfo(e.DisplayName,e.Repository,e.FileName,_settings.ModelIdFor(e),e.Weights,e.SizeBytes,e.Vision,e.DownloadAvailable,installed,_settings.Current.ActiveModelFile.Equals(e.FileName,StringComparison.OrdinalIgnoreCase),e.NativeContext,e.MaximumContext,SettingsService.Clone(_settings.ProfileFor(e)),e.Featured,e.NewUntilUtc is not null&&e.NewUntilUtc>DateTimeOffset.UtcNow&&!_settings.Current.SeenModelArtifacts.Contains(SeenIdentity(e)))
-            {Origin=IsExternal(e)?"ExternalLinked":e.LocalPath is not null||File.Exists(Path.Combine(_paths.ModelsDirectory,e.FileName))?"LocalManaged":"Remote",LinkedExternal=IsExternal(e),Missing=IsExternal(e)&&!File.Exists(ResolvePath(e)),Inspected=e.Inspected,InspectionMessage=e.InspectionMessage,PresetStatus=e.PresetStatus,HasMtp=e.HasMtp,HasDflash=e.HasDflash,HasDflash2=e.HasDflash2};
+            RefreshMemoryMetadata(e, installed);
+            return new ModelInfo(e.DisplayName,e.Repository,e.FileName,_settings.ModelIdFor(e),e.Weights,e.SizeBytes,e.Vision,e.DownloadAvailable,installed,_settings.Current.ActiveModelFile.Equals(e.FileName,StringComparison.OrdinalIgnoreCase),e.NativeContext,e.MaximumContext,SettingsService.Clone(_settings.ProfileFor(e)),e.Featured,IsRecent(e))
+            {Origin=IsExternal(e)?"ExternalLinked":e.LocalPath is not null||File.Exists(Path.Combine(_paths.ModelsDirectory,e.FileName))?"LocalManaged":"Remote",LinkedExternal=IsExternal(e),Missing=IsExternal(e)&&!File.Exists(ResolvePath(e)),Inspected=e.Inspected,InspectionMessage=e.InspectionMessage,PresetStatus=e.PresetStatus,HasMtp=e.HasMtp,HasDflash=e.HasDflash,HasDflash2=e.HasDflash2,EstimatedBaseVramMiB=e.BaseVramMiB,EstimatedKvMiBPerKToken=e.KvMiBPerKToken,EstimateKvPrecision=e.RecommendedKvPrecision,EstimateSpeculativeMode=e.RecommendedSpeculativeMode,MemoryGeometry=e.MemoryGeometry,FamilyId=e.FamilyId,FamilyDisplayName=e.FamilyDisplayName,VariantName=e.VariantName,VariantOrder=e.VariantOrder,RemoteFileName=e.RemoteFileName,Revision=e.Revision};
         }).ToList();
+    }
+    private void RefreshMemoryMetadata(ModelCatalogEntry entry, bool installed)
+    {
+        if (!installed) { entry.MemoryGeometry=null; entry.MemoryMetadataStamp=null; return; }
+        try
+        {
+            var path=ResolvePath(entry);
+            var info=new FileInfo(path);
+            var stamp=(path,info.Length,info.LastWriteTimeUtc);
+            if (entry.MemoryMetadataStamp==stamp) return;
+            var geometry=ModelMemoryMetadata.Read(path);
+            info.Refresh();
+            if (!info.Exists || info.Length!=stamp.Length || info.LastWriteTimeUtc!=stamp.LastWriteTimeUtc)
+            { entry.MemoryGeometry=null; entry.MemoryMetadataStamp=null; return; }
+            entry.MemoryGeometry=geometry; entry.MemoryMetadataStamp=stamp;
+        }
+        catch (Exception ex) when(ex is IOException or UnauthorizedAccessException or ArgumentException)
+        { entry.MemoryGeometry=null; entry.MemoryMetadataStamp=null; }
     }
     public ModelCatalogEntry LinkExternal(string source)
     {
@@ -141,7 +189,7 @@ public sealed class ModelCatalog
         lock(_sync)
         {
             entry=_entries.FirstOrDefault(x=>ResolvePath(x).Equals(path,StringComparison.OrdinalIgnoreCase))
-                ?? _entries.FirstOrDefault(x=>x.FileName.Equals(info.Name,StringComparison.OrdinalIgnoreCase)&&x.SizeBytes==info.Length&&!IsExternal(x)&&x.LocalPath is null)
+                ?? _entries.FirstOrDefault(x=>MatchesArtifactName(x,info)&&!IsExternal(x)&&x.LocalPath is null)
                 ?? AddLocalEntry(info.Name,info.Length,path);
         }
         _settings.Update(s=>
@@ -167,7 +215,7 @@ public sealed class ModelCatalog
             lock(_sync)
             {
                 var existing=_entries.FirstOrDefault(x=>ResolvePath(x).Equals(path,StringComparison.OrdinalIgnoreCase))
-                    ??_entries.FirstOrDefault(x=>x.FileName.Equals(info.Name,StringComparison.OrdinalIgnoreCase)&&x.SizeBytes==info.Length&&!IsExternal(x));
+                    ??_entries.FirstOrDefault(x=>MatchesArtifactName(x,info)&&!IsExternal(x));
                 entry=existing??AddLocalEntry(info.Name,info.Length,path);
                 if(existing is null)added++;
                 entry.LocalPath=Path.GetFullPath(path);
@@ -179,7 +227,7 @@ public sealed class ModelCatalog
         SaveCache();
         return added;
     }
-    public bool ShouldRefresh()=>_settings.Current.AutoCheckCatalog&&(_settings.Current.LastCatalogCheckUtc is null||DateTimeOffset.UtcNow-_settings.Current.LastCatalogCheckUtc>=TimeSpan.FromHours(Math.Max(1,_settings.Current.CatalogCheckHours)));
+    public bool ShouldRefresh()=>_settings.Current.AutoCheckCatalog&&(_settings.Current.LastCatalogCheckUtc is null||_time.GetUtcNow()-_settings.Current.LastCatalogCheckUtc>=TimeSpan.FromHours(Math.Max(1,_settings.Current.CatalogCheckHours)));
     public async Task<int> RefreshOnlineAsync(CancellationToken token=default)
     {
         await _refreshGate.WaitAsync(token);
@@ -194,7 +242,8 @@ public sealed class ModelCatalog
             foreach(var entry in feed.Models)ValidateRemote(entry);
             foreach(var entry in feed.Models)Merge(entry,true);
             SaveCache();
-            _settings.Update(s=>s.LastCatalogCheckUtc=DateTimeOffset.UtcNow);
+            _settings.Update(s=>s.LastCatalogCheckUtc=_time.GetUtcNow());
+            Interlocked.Increment(ref _revision);
             return _entries.Count(x=>!before.Contains(x.FileName));
         }
         finally{_refreshGate.Release();}
@@ -205,10 +254,12 @@ public sealed class ModelCatalog
         lock(_sync)
         {
             var i=_entries.FindIndex(x=>x.FileName.Equals(e.FileName,StringComparison.OrdinalIgnoreCase));
-            if(i<0){_entries.Add(e);return;}
+            if(i<0){e.FirstSeenUtc??=_time.GetUtcNow();_entries.Add(e);return;}
             // Online refresh owns changing artifact metadata. Runtime capability and
             // recommended launch settings stay curated by this application version.
             var current=_entries[i];
+            current.FirstSeenUtc??=e.FirstSeenUtc??_time.GetUtcNow();
+            if(!fullProfile)current.PublishedAtUtc??=e.PublishedAtUtc;
             if(!fullProfile)
             {
                 current.ExpectedSha256=e.ExpectedSha256;current.IdentityVerified=e.IdentityVerified;current.VerifiedWriteUtc=e.VerifiedWriteUtc;current.LocalPath=e.LocalPath;
@@ -218,7 +269,10 @@ public sealed class ModelCatalog
                 current.HasMtp=e.HasMtp;current.HasDflash=e.HasDflash;current.HasDflash2=e.HasDflash2;current.CompatibleWithBuild=e.CompatibleWithBuild;
                 current.InspectedWriteUtc=e.InspectedWriteUtc;current.InspectorWriteUtc=e.InspectorWriteUtc;
                 current.InspectedEngineDirectory=e.InspectedEngineDirectory;current.InspectedModelPath=e.InspectedModelPath;
-                current.NativeContext=e.NativeContext;current.MaximumContext=e.MaximumContext;current.YarnSupported=e.YarnSupported;current.StarterProfile=e.StarterProfile;
+                current.YarnSupported=e.YarnSupported;current.StarterProfile=e.StarterProfile;
+                // A local cache must not turn a newly curated variant back into an unknown local model.
+                if(current.DownloadAvailable&&current.Repository!="Local file"&&current.Sha256.Length==64)return;
+                current.NativeContext=e.NativeContext;current.MaximumContext=e.MaximumContext;
             }
             current.DisplayName=string.IsNullOrWhiteSpace(e.DisplayName)?current.DisplayName:e.DisplayName;
             current.Repository=string.IsNullOrWhiteSpace(e.Repository)?current.Repository:e.Repository;
@@ -230,6 +284,12 @@ public sealed class ModelCatalog
             current.Vision=e.Vision;
             current.ArtifactVersion=e.ArtifactVersion;
             current.Featured=e.Featured;current.NewUntilUtc=e.NewUntilUtc;
+            current.PublishedAtUtc=e.PublishedAtUtc??current.PublishedAtUtc;
+            if(!string.IsNullOrWhiteSpace(e.FamilyId))
+            {
+                current.FamilyId=e.FamilyId;current.FamilyDisplayName=e.FamilyDisplayName;
+                current.VariantName=e.VariantName;current.VariantOrder=e.VariantOrder;
+            }
             if(fullProfile)
             {
                 current.Revision=e.Revision;current.DownloadAvailable=e.DownloadAvailable;current.RecommendedContext=e.RecommendedContext;
@@ -239,17 +299,23 @@ public sealed class ModelCatalog
                 current.NativeContext=e.NativeContext;current.MaximumContext=e.MaximumContext;current.BaseVramMiB=e.BaseVramMiB;
                 current.KvMiBPerKToken=e.KvMiBPerKToken;current.RecommendedGdnStateFp16=e.RecommendedGdnStateFp16;
                 current.RecommendedMtpAttentionWindow=e.RecommendedMtpAttentionWindow;
+                current.RecommendedNgramDraftTokens=e.RecommendedNgramDraftTokens;
+                current.RecommendedStructuredOutput=e.RecommendedStructuredOutput;
             }
         }
     }
+    private static bool MatchesArtifactName(ModelCatalogEntry entry,FileInfo file) => entry.SizeBytes==file.Length
+        && (entry.FileName.Equals(file.Name,StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(entry.RemoteFileName)&&entry.RemoteFileName.Equals(file.Name,StringComparison.OrdinalIgnoreCase)));
     private static void ValidateRemote(ModelCatalogEntry entry)
     {
         if(Path.GetFileName(entry.FileName)!=entry.FileName||!entry.FileName.EndsWith(".ninfer",StringComparison.OrdinalIgnoreCase)
-            ||entry.Repository.Split('/').Length!=2||entry.Revision.Length!=40||!entry.Revision.All(Uri.IsHexDigit)
+            ||!IsPublisherModel(entry)||entry.Repository.Split('/').Length!=2||entry.Revision.Length!=40||!entry.Revision.All(Uri.IsHexDigit)
             ||entry.Sha256.Length!=64||!entry.Sha256.All(Uri.IsHexDigit)||entry.SizeBytes<=0||entry.ArtifactVersion!=3
             ||entry.RecommendedContext is <1024 or >1048576||entry.MaximumContext is <1024 or >1048576||entry.RecommendedContext>entry.MaximumContext)
             throw new InvalidDataException($"The remote profile for {entry.DisplayName} is invalid.");
     }
+    private static bool IsPublisherModel(ModelCatalogEntry entry)=>entry.Repository.StartsWith("2beng2/",StringComparison.Ordinal);
     private void RestoreExternalArtifacts()
     {
         foreach(var pair in _settings.Current.ExternalModelPaths.ToArray())
@@ -343,7 +409,33 @@ public sealed class ModelCatalog
         entry.IgnoredAdjacentPresetFingerprint=SmallPresetFingerprint(Path.ChangeExtension(ResolvePath(entry),".ninferez.json"));
         SaveCache();
     }
-    public void MarkSeen(ModelCatalogEntry entry)=>_settings.Update(s=>s.SeenModelArtifacts.Add(SeenIdentity(entry)));
+    public void MarkSeen(ModelCatalogEntry entry)=>_settings.Update(s=>s.SeenModelArtifacts.Add(AnnouncementIdentity(entry)));
+    private bool IsRecent(ModelCatalogEntry entry)=>entry.DownloadAvailable&&entry.Repository!="Local file"
+        &&ModelAnnouncementPolicy.IsRecent(_time.GetUtcNow(),entry.PublishedAtUtc,entry.FirstSeenUtc,entry.NewUntilUtc);
+    public CatalogNotificationSnapshot Notifications(bool startupComplete)
+    {
+        lock(_sync)
+        {
+            var recent=_entries.Where(x=>x.Featured&&IsRecent(x)).ToArray();
+            var seen=_settings.Current.SeenModelArtifacts;
+            return new(Interlocked.Read(ref _revision),startupComplete,recent.Select(x=>x.FileName).ToArray(),
+                recent.Where(x=>!seen.Contains(AnnouncementIdentity(x))&&!seen.Contains(SeenIdentity(x)))
+                    .Select(x=>new ModelAnnouncement(AnnouncementIdentity(x),x.FileName,
+                        string.IsNullOrWhiteSpace(x.FamilyDisplayName)?x.DisplayName:x.FamilyDisplayName,x.VariantName)).ToArray());
+        }
+    }
+    public void DismissAnnouncements(IReadOnlyList<string> identities)
+    {
+        if(identities.Count is <1 or >1000||identities.Any(x=>x is null||x.Length>128))throw new ArgumentException("Choose the model announcements to dismiss.");
+        lock(_sync)
+        {
+            var known=_entries.Where(x=>x.DownloadAvailable).Select(AnnouncementIdentity).ToHashSet(StringComparer.Ordinal);
+            if(identities.Any(x=>!known.Contains(x)))throw new ArgumentException("A model announcement is no longer available. Refresh the library.");
+            _settings.Update(s=>{foreach(var identity in identities)s.SeenModelArtifacts.Add(identity);});
+        }
+    }
+    private static string AnnouncementIdentity(ModelCatalogEntry entry)=>"catalog:"+Convert.ToHexString(
+        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{entry.Repository}/{entry.FileName}/{entry.Sha256}"))).ToLowerInvariant();
     public void RememberVerification(ModelCatalogEntry entry)
     {
         entry.VerifiedWriteUtc=File.GetLastWriteTimeUtc(ResolvePath(entry));

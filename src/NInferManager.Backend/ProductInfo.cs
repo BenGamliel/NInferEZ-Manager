@@ -2,7 +2,7 @@ namespace NInferManager.Backend;
 
 public static class ProductInfo
 {
-    public const string Version = "0.0.1";
+    public const string Version = "1.0.0";
     public const string EngineRepository = "BenGamliel/NInferEZ-Engine";
     public const string EngineChannelUrl = "https://raw.githubusercontent.com/BenGamliel/NInferEZ-Engine/main/channel-manifest.json";
     public const string AppRepository = "BenGamliel/NInferEZ-Manager";

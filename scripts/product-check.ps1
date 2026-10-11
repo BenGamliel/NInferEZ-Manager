@@ -14,13 +14,13 @@ function Check([bool]$Condition, [string]$Message) {
 $props = Get-Content -LiteralPath (Join-Path $projectRoot 'Directory.Build.props') -Raw
 $productInfo = Get-Content -LiteralPath (Join-Path $projectRoot 'src/NInferManager.Backend/ProductInfo.cs') -Raw
 $installer = Get-Content -LiteralPath (Join-Path $projectRoot 'installer/NInferEZManager.iss') -Raw
-Check ($props -match '<Version>0\.0\.1</Version>') 'Assembly product version is 0.0.1'
-Check ($productInfo -match 'const string Version\s*=\s*"0\.0\.1"') 'Backend product version is 0.0.1'
-Check ($installer -match '#define AppVersion "0\.0\.1"') 'Installer product version is 0.0.1'
+Check ($props -match '<Version>1\.0\.0</Version>') 'Assembly product version is 1.0.0'
+Check ($productInfo -match 'const string Version\s*=\s*"1\.0\.0"') 'Backend product version is 1.0.0'
+Check ($installer -match '#define AppVersion "1\.0\.0"') 'Installer product version is 1.0.0'
 Check ($installer -match 'PrivilegesRequired=lowest') 'Installer is per-user without elevation'
 Check ($installer -match 'MB_YESNO or MB_DEFBUTTON2') 'Uninstall data removal defaults to No'
 Check ($installer -notmatch 'DelTree\(.*\{(?:userprofile|localappdata|app)\}[''"],') 'Uninstall does not recursively remove a broad root'
-foreach ($name in @('README.md', 'SECURITY.md', 'LICENSE', 'docs/PRODUCT-PLAN.md', 'docs/ACCEPTANCE-MATRIX.md', 'docs/THIRD-PARTY-NOTICES.md', 'assets/NInferEZ.ico')) {
+foreach ($name in @('README.md', 'SECURITY.md', 'LICENSE', 'docs/ECOSYSTEM.md', 'docs/ACCEPTANCE-MATRIX.md', 'docs/THIRD-PARTY-NOTICES.md', 'assets/NInferEZ.ico')) {
     Check (Test-Path -LiteralPath (Join-Path $projectRoot $name) -PathType Leaf) "Required product material: $name"
 }
 
@@ -40,6 +40,9 @@ if ($PackagePath) {
         foreach ($file in $payloadFiles | Where-Object Extension -in $textExtensions) {
             if ($file.Length -gt 16MB) { $failures.Add("Unexpected oversized text artifact: $($file.Name)"); continue }
             $content = Get-Content -LiteralPath $file.FullName -Raw
+            if ($file.FullName.EndsWith('Converter\runtime\python\Lib\venv\scripts\common\Activate.ps1', [StringComparison]::OrdinalIgnoreCase)) {
+                $content = $content.Replace('C:\Users\MyUser\Common\.venv','<standard-library-example>')
+            }
             if ($content -match '(?i)[A-Z]:[\\/]Users[\\/](?!Public[\\/]|Default[\\/])[^\\/\s]+|[A-Z]:[\\/]space[\\/]|github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]+|hf_[A-Za-z0-9]{12,}|Bearer\s+eyJ[A-Za-z0-9_-]+') {
                 $failures.Add("Potential personal path or credential in public text: $($file.Name)")
             }
