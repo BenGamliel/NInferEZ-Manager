@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory=$true)][string]$OwnerAccount
 )
 
+throw 'This source is Manager 1.1.0. Use scripts/package-1.1.0.ps1; release packaging is blocked until engine approval.'
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 $releaseLine = Split-Path -Parent (Split-Path -Parent $project)

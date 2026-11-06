@@ -5,6 +5,7 @@ param(
     [switch]$SkipInstaller
 )
 
+throw 'This source is Manager 1.1.0. Use scripts/package-1.1.0.ps1; release packaging is blocked until engine approval.'
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 if ([IO.DriveInfo]::new([IO.Path]::GetPathRoot($root)).AvailableFreeSpace -lt 2GB) { throw 'At least 2 GiB free disk space is required for packaging.' }

@@ -36,6 +36,8 @@ public sealed class SettingsService
             value.LastCatalogCheckUtc = Current.LastCatalogCheckUtc;
             value.LastEngineCheckUtc = Current.LastEngineCheckUtc;
             value.LastUpdateCheckUtc = Current.LastUpdateCheckUtc;
+            value.AvailableApplicationUpdate = Current.AvailableApplicationUpdate;
+            value.DismissedUpdateVersion = Current.DismissedUpdateVersion;
             Commit(value);
             return Current;
         }
@@ -52,7 +54,7 @@ public sealed class SettingsService
             foreach (var change in request.Changes.EnumerateObject())
             {
                 var property = typeof(ManagerSettings).GetProperties().FirstOrDefault(p => p.Name.Equals(change.Name, StringComparison.OrdinalIgnoreCase));
-                if (property is null || property.Name is nameof(ManagerSettings.SeenModelArtifacts) or nameof(ManagerSettings.ActiveModelFile) or nameof(ManagerSettings.ModelAliases) or nameof(ManagerSettings.ExternalModelPaths) or nameof(ManagerSettings.Revision) or nameof(ManagerSettings.SchemaVersion) or nameof(ManagerSettings.LastCatalogCheckUtc) or nameof(ManagerSettings.LastEngineCheckUtc) or nameof(ManagerSettings.LastUpdateCheckUtc))
+                if (property is null || property.Name is nameof(ManagerSettings.SeenModelArtifacts) or nameof(ManagerSettings.ActiveModelFile) or nameof(ManagerSettings.ModelAliases) or nameof(ManagerSettings.ExternalModelPaths) or nameof(ManagerSettings.Revision) or nameof(ManagerSettings.SchemaVersion) or nameof(ManagerSettings.LastCatalogCheckUtc) or nameof(ManagerSettings.LastEngineCheckUtc) or nameof(ManagerSettings.LastUpdateCheckUtc) or nameof(ManagerSettings.AvailableApplicationUpdate) or nameof(ManagerSettings.DismissedUpdateVersion))
                     throw new ArgumentException($"Setting '{change.Name}' is not editable through this operation.");
                 if (property.Name == nameof(ManagerSettings.Profiles))
                 {
@@ -170,6 +172,8 @@ public sealed class SettingsService
             p = ProfileSettingsPolicy.Effective(p);
             if (!Enum.IsDefined(p.KvPrecision) || !Enum.IsDefined(p.KvCapacityMode) || !Enum.IsDefined(p.SpeculativeMode) || !Enum.IsDefined(p.LogLevel)) throw new ArgumentException("Invalid model profile option.");
             Range(p.Device, 0, 63, "CUDA device index");
+            if(p.VisionResidency is not ("resident" or "overlay")) throw new ArgumentException("Vision residency must be resident or overlay.");
+            if(p.CudaGraphAllowanceMiB is int graphAllowance) Range(graphAllowance, 0, 65536, "CUDA graph reserve (MiB)");
             Range(p.NgramDraftTokens, 0, 63, "Repeated-text draft tokens");
             if (p.HostCacheMiB is int hostBudget) Range(hostBudget, 0, int.MaxValue, "Combined RAM cache (MiB)");
             if (p.KvCapacityMode == KvCapacityMode.Auto) Range(p.KvHeadroomMiB, 0, 65536, "KV memory reserve (MiB)");

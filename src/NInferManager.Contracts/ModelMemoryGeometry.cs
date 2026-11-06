@@ -5,6 +5,8 @@ public sealed record AttentionMemoryGeometry(int FullLayers, int LocalLayers, in
 public sealed record ModelMemoryGeometry(long ArtifactBytes, AttentionMemoryGeometry Target,
     bool HasMtp, AttentionMemoryGeometry? Dflash, AttentionMemoryGeometry? Dflash2)
 {
+    internal const double RecommendationKvAllowance = 1.10;
+
     public bool TryEstimate(ModelProfile profile, out double kvMiBPerKToken, out double fixedDraftMiB)
     {
         kvMiBPerKToken = fixedDraftMiB = 0;
@@ -37,7 +39,7 @@ public sealed record ModelMemoryGeometry(long ArtifactBytes, AttentionMemoryGeom
             fixedDraftMiB = draft.LocalLayers * draftVectorBytes * draft.LocalWindow / (1024d * 1024d);
         }
         // Small allowance for paged-cache tables/alignment, not an exact runtime reservation.
-        kvMiBPerKToken = bytesPerToken / 1024d * 1.10;
+        kvMiBPerKToken = bytesPerToken / 1024d * RecommendationKvAllowance;
         return double.IsFinite(kvMiBPerKToken) && double.IsFinite(fixedDraftMiB);
     }
 

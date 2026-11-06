@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace NInferManager.Backend;
@@ -9,7 +10,12 @@ public static class ModelInspection
     {
         var exe=Path.Combine(engineDirectory,"ninfer-inspect.exe");
         if(!File.Exists(exe))return null;
-        var start=new ProcessStartInfo(exe){WorkingDirectory=engineDirectory,UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
+        var start=new ProcessStartInfo(exe)
+        {
+            WorkingDirectory=engineDirectory, UseShellExecute=false, CreateNoWindow=true,
+            RedirectStandardOutput=true, RedirectStandardError=true,
+            StandardOutputEncoding=Encoding.UTF8, StandardErrorEncoding=Encoding.UTF8
+        };
         start.ArgumentList.Add("--model");start.ArgumentList.Add(path);start.ArgumentList.Add("--json");
         using var process=Process.Start(start)??throw new InvalidOperationException("Model inspection could not start.");
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(45));
@@ -19,9 +25,25 @@ public static class ModelInspection
             await process.WaitForExitAsync(timeout.Token);
             var text=await output;var detail=await error;
             if(text.Length>4*1024*1024)throw new InvalidDataException("The model inspection result is too large.");
+            if(string.IsNullOrWhiteSpace(text))
+                throw new InvalidDataException(string.IsNullOrWhiteSpace(detail)
+                    ? $"The engine inspector returned no result (exit code {process.ExitCode})."
+                    : detail.Trim());
             var document=JsonDocument.Parse(text);
-            if(process.ExitCode!=0||!document.RootElement.TryGetProperty("valid",out var valid)||!valid.GetBoolean())
-            {document.Dispose();throw new InvalidDataException(string.IsNullOrWhiteSpace(detail)?"The model artifact failed engine inspection.":detail.Trim());}
+            var result=document.RootElement;
+            if(process.ExitCode!=0||result.ValueKind!=JsonValueKind.Object||
+                !result.TryGetProperty("valid",out var valid)||valid.ValueKind!=JsonValueKind.True)
+            {
+                var message=string.IsNullOrWhiteSpace(detail)?null:detail.Trim();
+                if(message is null&&result.ValueKind==JsonValueKind.Object&&
+                    result.TryGetProperty("error",out var failure)&&failure.ValueKind==JsonValueKind.Object&&
+                    failure.TryGetProperty("message",out var reason)&&reason.ValueKind==JsonValueKind.String)
+                    message=reason.GetString();
+                document.Dispose();
+                throw new InvalidDataException(string.IsNullOrWhiteSpace(message)
+                    ? "The model artifact failed engine inspection."
+                    : message);
+            }
             return document;
         }
         catch

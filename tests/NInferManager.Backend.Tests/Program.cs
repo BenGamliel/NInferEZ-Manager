@@ -21,6 +21,15 @@ try
         await ConversionChecks.RunAsync(paths,new ManagerLog(paths),Assert);
         return;
     }
+    if(args.SequenceEqual(new[]{"--release110-only"}))
+    {
+        await Release110Checks.RunAsync(paths,settings,new ModelCatalog(paths,settings),Assert);
+        await ConverterRuntimeChecks.RunAsync(paths,Assert);
+        await VersionIdentityChecks.RunAsync(paths,settings,Assert);
+        await ManagerUpdateChecks.RunAsync(paths,Assert);
+        Console.WriteLine($"All {CheckCount.Count} Manager 1.1.0 release and runtime checks passed.");
+        return;
+    }
     Assert(settings.Current.PublicPort==8173,"default port");
     Assert(!settings.Current.AllowLocalNetwork,"local-network access is disabled by default");
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5080")=="sm120a"&&EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 5090")=="sm120a","RTX 5000 Series maps to the Blackwell sm120a package");
@@ -28,9 +37,8 @@ try
     Assert(EnginePackageService.RecommendArchitecture("NVIDIA GeForce RTX 3090")=="sm86","RTX 3000 Series maps to sm86");
     Directory.CreateDirectory(paths.EngineDirectory);
     await File.WriteAllBytesAsync(Path.Combine(paths.EngineDirectory,"ninfer-serve.exe"),[0]);
-    await File.WriteAllTextAsync(Path.Combine(paths.EngineDirectory,"engine-manifest.json"),"""
-        {"product":"NInferEZ Engine","contractVersion":1,"engineVersion":"1.0.0","cudaArchitecture":"sm120a"}
-        """);
+    var fixtureEngineVersion=ReleaseEnginePolicy.Embedded().Packages.FirstOrDefault(p=>p.CudaArchitecture=="sm120a")?.EngineVersion??"1.0.0";
+    await File.WriteAllTextAsync(Path.Combine(paths.EngineDirectory,"engine-manifest.json"),System.Text.Json.JsonSerializer.Serialize(new{product="NInferEZ Engine",contractVersion=1,engineVersion=fixtureEngineVersion,cudaArchitecture="sm120a"}));
     using(var enginePackages=new EnginePackageService(paths,new ManagerLog(paths),settings))
     {
         var engineLibrary=await enginePackages.SnapshotAsync();
@@ -40,7 +48,7 @@ try
     Assert(EditableSettingTypes.Supports(typeof(string))&&EditableSettingTypes.Supports(typeof(bool))&&EditableSettingTypes.Supports(typeof(int))&&EditableSettingTypes.Supports(typeof(double?))&&EditableSettingTypes.Supports(typeof(KvPrecision)),"advanced settings accept supported scalar types");
     Assert(!EditableSettingTypes.Supports(typeof(Dictionary<string,string>))&&!EditableSettingTypes.Supports(typeof(Dictionary<string,ModelProfile>))&&!EditableSettingTypes.Supports(typeof(DateTimeOffset?)),"advanced settings reject dictionaries and unsupported complex types");
     var catalog=new ModelCatalog(paths,settings);
-    Assert(catalog.Entries.Count==4,"the curated catalog includes only our four published artifacts");
+    Assert(catalog.Entries.Count==5,"the curated catalog includes our five published artifacts");
     Assert(catalog.Entries.All(x=>x.Repository.StartsWith("2beng2/",StringComparison.Ordinal)),"recommendations contain no third-party model download links");
     Assert(catalog.Entries.All(x=>x.Revision.Length==40&&x.Revision.All(Uri.IsHexDigit)),"every bundled catalog download is pinned to an immutable revision");
     var swift=catalog.Entries.Single(x=>x.ModelId=="swift-1.5-qwen3.8-27b-uncensored");
@@ -191,8 +199,38 @@ try
     Assert(patched.IdleMinutes==0,"immediate after-request memory policy is valid");
     try{settings.Patch(new(valid.Revision,patchChanges));throw new Exception("stale patch unexpectedly succeeded");}catch(InvalidOperationException){Assert(true,"stale settings patch is rejected");}
     Assert(!catalog.IsExternal(catalog.Find(discovered.FileName)!),"Models discovery does not create external links");
-    Assert(GpuMonitor.Parse("0, GPU-one, NVIDIA GeForce RTX 5090, 1000, 32000, N/A, N/A\n1, GPU-two, NVIDIA GeForce RTX 4090, 2000, 24000, 2, 31").Count==2,"GPU parsing supports multiple devices and unavailable telemetry");
-    try{EngineController.RecommendContext(iq,new("tiny",0,1024,0,0));throw new Exception("no-fit context unexpectedly succeeded");}catch(InvalidOperationException){Assert(true,"no-fit automatic context fails explicitly");}
+    var gpuSamples=GpuMonitor.Parse("0, GPU-one, NVIDIA GeForce RTX 5090, 1000, 32000, N/A, N/A, 30800\n1, GPU-two, NVIDIA GeForce RTX 4090, 2000, 24000, 2, 31");
+    Assert(gpuSamples.Count==2&&gpuSamples[0].AvailableMiB==30800&&gpuSamples[1].AvailableMiB==22000,"FIT uses measured free VRAM with total minus used as a telemetry fallback");
+    var previousFit=new ContextFitSample(65536,25000);
+    const double fitBytesPerToken=32768;
+    Assert(ContextFitSearch.InitialContext(131072,78400,fitBytesPerToken,null,25000)==77824,"first fit rounds a VRAM estimate down one partial step");
+    Assert(ContextFitSearch.InitialContext(131072,90000,fitBytesPerToken,previousFit,25004)==65536
+        && ContextFitSearch.InitialContext(131072,90000,fitBytesPerToken,previousFit,24996)==65536,
+        "small changes in available VRAM reuse the last working context");
+    Assert(ContextFitSearch.InitialContext(131072,90000,fitBytesPerToken,previousFit,25155)==65536
+        && ContextFitSearch.InitialContext(131072,90000,fitBytesPerToken,previousFit,25160)==70656
+        && ContextFitSearch.InitialContext(131072,90000,fitBytesPerToken,previousFit,24840)==60416,
+        "FIT raises context for a verified-size improvement and reduces it when free VRAM drops");
+    var fitTrials=new List<int>();
+    var bestFit=await ContextFitSearch.FindAsync(77824,fitBytesPerToken,tokens=>
+    {
+        fitTrials.Add(tokens);
+        return Task.FromResult<long?>(tokens<=70234 ? null : (tokens-70234)*(long)fitBytesPerToken);
+    });
+    Assert(bestFit==69632&&fitTrials.SequenceEqual(new[]{77824,69632}),"FIT uses the engine's memory shortfall to correct the estimate in one retry");
+    fitTrials.Clear();
+    var noFit=await ContextFitSearch.FindAsync(32768,0,tokens=>{fitTrials.Add(tokens);return Task.FromResult<long?>(0);});
+    Assert(noFit==0&&fitTrials.Min()==16384,"automatic fitting stops at the 16K minimum when it cannot fit");
+    Assert(StartupDiagnostics.ContextCapacityShortfall("minimum Engine runtime reservation requires 5242880 bytes in addition to 1048576 bytes of automatic headroom, but only 4194304 bytes are available after weights")==2097152,"startup fit diagnostics include the configured reserve in the measured VRAM shortfall");
+    var fitHistory=new ContextFitHistory(paths.DataDirectory);
+    fitHistory.Remember("test-fit-profile",previousFit);
+    Assert(new ContextFitHistory(paths.DataDirectory).Find("test-fit-profile")==previousFit,"confirmed FIT context and VRAM survive a backend restart");
+    var memoryProfile=new ModelProfile{MaxContext=65536};
+    var fixtureEngine=Path.Combine(paths.EngineDirectory,"ninfer-serve.exe");
+    var originalFitKey=ContextFitHistory.Key(paths.SettingsFile,fixtureEngine,gpuSamples[0],memoryProfile,false);
+    memoryProfile.MaxContext=131072;
+    Assert(ContextFitHistory.Key(paths.SettingsFile,fixtureEngine,gpuSamples[0],memoryProfile,false)!=originalFitKey,
+        "changing the configured context ceiling recalculates FIT even when free VRAM is stable");
     Assert(!catalog.FindInstalledByApiName(" Integration-test-model ")?.FileName.Equals(iq.FileName,StringComparison.OrdinalIgnoreCase)??true,"API model routing requires the canonical identifier");
     await RegressionChecks.RunAsync(paths,settings,catalog,log,Assert);
     ProfilePolicyChecks.Run(Assert);

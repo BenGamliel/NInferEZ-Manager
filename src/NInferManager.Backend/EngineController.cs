@@ -14,6 +14,7 @@ public sealed class EngineController : IAsyncDisposable
     private readonly SettingsService _settings;
     private readonly ModelCatalog _catalog;
     private readonly ManagerLog _log;
+    private readonly ContextFitHistory _fitHistory;
     private readonly EnginePackageService? _enginePackages;
     private readonly ProcessJob _processJob=new();
     private Process? _process;
@@ -23,11 +24,16 @@ public sealed class EngineController : IAsyncDisposable
     private CancellationTokenSource? _loadCancellation;
     private Task? _loadTask;
     private EngineOperationStatus _operation = IdleOperation();
-    public EngineController(AppPaths paths, SettingsService settings, ModelCatalog catalog, ManagerLog log, EnginePackageService? enginePackages = null) { _paths = paths; _settings = settings; _catalog = catalog; _log = log; _enginePackages = enginePackages; }
+    public EngineController(AppPaths paths, SettingsService settings, ModelCatalog catalog, ManagerLog log, EnginePackageService? enginePackages = null)
+    {
+        _paths = paths; _settings = settings; _catalog = catalog; _log = log; _enginePackages = enginePackages;
+        _fitHistory = new(paths.DataDirectory);
+    }
     public EngineState State { get; private set; }
     public bool IsLoaded => State == EngineState.Ready && _process is { HasExited: false };
     public ModelCatalogEntry? ActiveModel => _catalog.Find(_settings.Current.ActiveModelFile);
     public LoadedEngineSession? Session { get; private set; }
+    public ContextFitResult? LastContextFit { get; private set; }
     public int Port => Session?.Port ?? _settings.Current.BackendPort;
     public string? InternalApiKey => Session?.ApiKey;
 
@@ -39,6 +45,7 @@ public sealed class EngineController : IAsyncDisposable
     private IReadOnlyList<string> BuildArguments(ModelCatalogEntry model, ModelProfile p, ManagerSettings settings)
     {
         p = p.ManageAdvancedSettings ? ProfileSettingsPolicy.Managed(p, model.RecommendedProfile()) : ProfileSettingsPolicy.Effective(p);
+        if (p.AutoContext) p.KvCapacityMode = KvCapacityMode.Auto;
         var path = _catalog.ResolvePath(model);
         if(model.InvalidAdjacentPreset)throw new InvalidOperationException(model.PresetStatus);
         SettingsService.ValidateProfile(p);
@@ -69,7 +76,7 @@ public sealed class EngineController : IAsyncDisposable
             for (var index = args.Count - 2; index >= 0; index--) if (args[index] is "--host-state-slots" or "--host-kv-mib") { args.RemoveAt(index + 1); args.RemoveAt(index); }
             Add(args,"--host-cache-mib",hostCache);
         }
-        if (p.VisionEnabled && model.Vision) args.Add("--vision");
+        if (p.VisionEnabled && model.Vision) { args.Add("--vision"); Add(args, "--vision-residency", p.VisionResidency); }
         else
         {
             RemovePairs(args, "--media-cache-mib", "--media-live-mib", "--media-preprocess-threads");
@@ -77,6 +84,7 @@ public sealed class EngineController : IAsyncDisposable
         if (p.AlternativePrefixCache)
             RemovePairs(args, "--device-state-slots", "--host-state-slots", "--host-kv-mib");
         if (!p.CudaGraphEnabled) args.Add("--no-cuda-graph");
+        else if(p.CudaGraphAllowanceMiB is int graphAllowance) Add(args, "--cuda-graph-allowance-mib", graphAllowance);
         if (!p.PrefixReuseEnabled) args.Add("--no-prefix-reuse");
         if (p.GdnStateFp16) args.Add("--gdn-state-fp16");
         if (p.SpeculativeMode == SpeculativeMode.Mtp && p.MtpAttentionWindow > 0) Add(args, "--mtp-attention-window", p.MtpAttentionWindow);
@@ -112,10 +120,13 @@ public sealed class EngineController : IAsyncDisposable
             if (flags.Contains(args[index])) { args.RemoveAt(index + 1); args.RemoveAt(index); }
     }
 
+    public Func<string?>? ProductUpdateBlocker { get; set; }
+
     public EngineOperationStatus StartLoad(ModelCatalogEntry? requestedModel=null)
     {
         lock (_operationSync)
         {
+            if(ProductUpdateBlocker?.Invoke() is {} updateBlocker) throw new InvalidOperationException(updateBlocker);
             if (IsLoaded)
             {
                 _operation = new EngineOperationStatus(null, EngineOperationState.Completed, "Ready", "The model is already loaded.", null, 0, false);
@@ -212,25 +223,13 @@ public sealed class EngineController : IAsyncDisposable
             if (IsLoaded) return;
             var model = selectedModel ?? throw new InvalidOperationException("Choose an installed model first.");
             var engineDirectory = _enginePackages?.ActiveDirectory ?? _paths.EngineDirectory;
+            await _catalog.ResolveVersionRequirementsAsync(model,token);
+            ModelVersionPolicy.Require(model, ModelVersionPolicy.ReadEngineVersion(engineDirectory), includeEngine:true);
             await _catalog.InspectAsync(model, engineDirectory, token);
             var profile = SettingsService.Clone(_settings.ProfileFor(model));
             profile = profile.ManageAdvancedSettings ? ProfileSettingsPolicy.Managed(profile, model.RecommendedProfile()) : ProfileSettingsPolicy.Effective(profile);
             var launchSettings = _settings.Snapshot();
             launchSettings.ApiKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-            if (profile.AutoContext && !profile.ManageAdvancedSettings)
-            {
-                UpdateOperation("Detecting hardware", "Selecting a context size for the detected GPU.");
-                var gpu = await GpuMonitor.ReadAsync(profile.Device);
-                if (gpu is null) throw new InvalidOperationException("A supported NVIDIA GPU was not detected.");
-                var recommended = RecommendContext(model, gpu, profile);
-                if (profile.MaxContext != recommended)
-                {
-                    profile.MaxContext = recommended;
-                    profile.CustomKvCapacity = recommended;
-                    profile.DefaultMaxTokens = Math.Min(profile.DefaultMaxTokens, recommended);
-                    _log.Write($"Auto context selected {recommended:N0} tokens for {gpu.Name} ({gpu.TotalMiB:N0} MiB VRAM)." );
-                }
-            }
             var exe = Path.Combine(engineDirectory, "ninfer-serve.exe");
             var modelPath = _catalog.ResolvePath(model);
             if (!File.Exists(exe)) throw new FileNotFoundException("NInfer runtime is missing.", exe);
@@ -245,42 +244,120 @@ public sealed class EngineController : IAsyncDisposable
                 architecture=manifest.RootElement.TryGetProperty("cudaArchitecture",out var arch)?arch.GetString():null;
                 version=manifest.RootElement.TryGetProperty("engineVersion",out var v)?v.GetString():null;
             }
-            Session = new(sessionId, model, launchSettings.ModelAliases.GetValueOrDefault(model.FileName,model.ModelId).Trim(), launchSettings.BackendPort, launchSettings.ApiKey, SettingsService.Clone(profile), engineDirectory,architecture,version);
             _log.BeginEngineSession();
-            UpdateOperation("Starting engine", "Starting NInferEZ Engine.");
-            var info = new ProcessStartInfo(exe) { WorkingDirectory = engineDirectory, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-            foreach (var arg in BuildArguments(model, profile, launchSettings)) info.ArgumentList.Add(arg);
-            var process = new Process { StartInfo = info, EnableRaisingEvents = true };
-            while (_startupMessages.TryDequeue(out _)) { }
-            while (_startupFailures.TryDequeue(out _)) { }
-            process.OutputDataReceived += (_, e) => { if (e.Data is not null) RecordEngineLine(e.Data); };
-            process.ErrorDataReceived += (_, e) => { if (e.Data is not null) RecordEngineLine(e.Data); };
-            process.Exited += (_, _) => { if (ReferenceEquals(_process, process) && State is EngineState.Loading or EngineState.Ready) State = EngineState.Unloaded; };
-            if (!process.Start()) throw new InvalidOperationException("Windows could not start NInfer.");
-            _processJob.Assign(process);
-            _process = process; process.BeginOutputReadLine(); process.BeginErrorReadLine();
-            using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(1) };
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", launchSettings.ApiKey);
-            var deadline = DateTime.UtcNow.AddMinutes(15);
-            while (DateTime.UtcNow < deadline)
+            if (profile.AutoContext)
+                await FitContextAsync(model, profile, launchSettings, exe, engineDirectory, token);
+            else
             {
-                token.ThrowIfCancellationRequested();
-                if (process.HasExited) throw new InvalidOperationException($"NInfer exited during startup with code {process.ExitCode}. {StartupDetail()}");
-                try
-                {
-                    using var response = await client.GetAsync($"http://127.0.0.1:{launchSettings.BackendPort}/v1/models", token);
-                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("The engine rejected its private readiness credential.");
-                    if (response.IsSuccessStatusCode) { State = EngineState.Ready; return; }
-                }
-                catch (HttpRequestException) { }
-                catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
-                await Task.Delay(400, token);
+                UpdateOperation("Starting engine", "Starting NInferEZ Engine.");
+                await StartEngineAsync(exe, engineDirectory, BuildArguments(model, profile, launchSettings), launchSettings, token);
             }
-            throw new TimeoutException($"NInfer did not become ready within 15 minutes. {StartupDetail()}");
+            token.ThrowIfCancellationRequested();
+            Session = new(sessionId, model, launchSettings.ModelAliases.GetValueOrDefault(model.FileName,model.ModelId).Trim(), launchSettings.BackendPort, launchSettings.ApiKey, SettingsService.Clone(profile), engineDirectory,architecture,version);
+            if (profile.AutoContext) LastContextFit = new(model.FileName, profile.MaxContext);
+            State = EngineState.Ready;
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { await KillAsync(); State = EngineState.Unloaded; throw; }
         catch { await KillAsync(); State = EngineState.Error; throw; }
         finally { _gate.Release(); }
+    }
+
+    private async Task FitContextAsync(ModelCatalogEntry model, ModelProfile profile, ManagerSettings settings,
+        string exe, string engineDirectory, CancellationToken token)
+    {
+        var ceiling = Math.Min(profile.MaxContext, model.MaximumContext);
+        var outputLimit = profile.DefaultMaxTokens;
+        profile.KvCapacityMode = KvCapacityMode.Auto;
+        UpdateOperation("Fitting context", "Reading available GPU memory.");
+        var gpu = await GpuMonitor.ReadAsync(profile.Device, fresh: true).WaitAsync(token);
+        var estimate = ModelMemoryFit.EstimateContext(_catalog.Describe(model), gpu, profile, out var bytesPerToken);
+        var key = gpu is null ? null : ContextFitHistory.Key(_catalog.ResolvePath(model), exe, gpu, profile,
+            model.NativeContext > 0 && ceiling > model.NativeContext);
+        var previous = key is null ? null : _fitHistory.Find(key);
+        var initial = ContextFitSearch.InitialContext(ceiling, estimate, bytesPerToken, previous, gpu?.AvailableMiB);
+        var attempts = 0;
+        _log.Write($"Automatic context fit: starting at {initial:N0} tokens (ceiling {ceiling:N0}, free GPU memory {gpu?.AvailableMiB.ToString("N0") ?? "unknown"} MiB).");
+
+        async Task<long?> TryContextAsync(int tokens)
+        {
+            token.ThrowIfCancellationRequested();
+            await KillAsync();
+            if (attempts++ > 0 && key is not null)
+                gpu = await GpuMonitor.ReadAsync(profile.Device, fresh: true).WaitAsync(token) ?? gpu;
+            profile.MaxContext = tokens;
+            profile.CustomKvCapacity = tokens;
+            profile.DefaultMaxTokens = Math.Min(outputLimit, tokens);
+            UpdateOperation("Fitting context", $"Checking {tokens:N0} tokens against available GPU memory.");
+            _log.Write($"Automatic context fit: trying {tokens:N0} tokens.");
+            try
+            {
+                await StartEngineAsync(exe, engineDirectory, BuildArguments(model, profile, settings), settings, token);
+                return null;
+            }
+            catch (InvalidOperationException error) when (StartupDiagnostics.IsContextCapacityFailure(error.Message))
+            {
+                _log.Write($"Automatic context fit: {tokens:N0} tokens did not fit.", error);
+                return StartupDiagnostics.ContextCapacityShortfall(error.Message);
+            }
+        }
+
+        var chosen = await ContextFitSearch.FindAsync(initial, bytesPerToken, TryContextAsync);
+        if (chosen == 0)
+            throw new InvalidOperationException("Automatic context fitting could not fit the 16,384-token minimum with this profile and the available GPU memory. Full details are in Logs.");
+        token.ThrowIfCancellationRequested();
+        if (key is not null && gpu is not null && (previous?.Tokens != chosen || attempts > 1))
+            _fitHistory.Remember(key, new(chosen, gpu.AvailableMiB));
+        _log.Write($"Automatic context fit selected {chosen:N0} tokens after {attempts} load attempt(s) (ceiling {ceiling:N0}).");
+    }
+
+    private async Task StartEngineAsync(string exe, string engineDirectory, IReadOnlyList<string> arguments,
+        ManagerSettings settings, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var info = new ProcessStartInfo(exe) { WorkingDirectory = engineDirectory, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var arg in arguments) info.ArgumentList.Add(arg);
+        var process = new Process { StartInfo = info, EnableRaisingEvents = true };
+        _process = process;
+        _startupMessages.Clear();
+        _startupFailures.Clear();
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) RecordEngineLine(e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) RecordEngineLine(e.Data); };
+        process.Exited += (_, _) => { if (ReferenceEquals(_process, process) && State == EngineState.Ready) State = EngineState.Unloaded; };
+        try
+        {
+            if (!process.Start()) throw new InvalidOperationException("Windows could not start NInfer.");
+        }
+        catch
+        {
+            _process = null;
+            process.Dispose();
+            throw;
+        }
+        _processJob.Assign(process);
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(1) };
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.ApiKey);
+        var deadline = DateTime.UtcNow.AddMinutes(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            token.ThrowIfCancellationRequested();
+            if (process.HasExited)
+            {
+                await process.WaitForExitAsync(token);
+                throw new InvalidOperationException($"NInfer exited during startup with code {process.ExitCode}. {StartupDetail()}");
+            }
+            try
+            {
+                using var response = await client.GetAsync($"http://127.0.0.1:{settings.BackendPort}/v1/models", token);
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("The engine rejected its private readiness credential.");
+                if (response.IsSuccessStatusCode && !process.HasExited) return;
+            }
+            catch (HttpRequestException) { }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
+            await Task.Delay(400, token);
+        }
+        throw new TimeoutException($"NInfer did not become ready within 15 minutes. {StartupDetail()}");
     }
     public async Task UnloadAsync(string reason)
     {
@@ -338,19 +415,6 @@ public sealed class EngineController : IAsyncDisposable
     private static EngineOperationStatus IdleOperation() => new(null, EngineOperationState.None, "Idle", "No engine operation is running.", null, 0, false);
     private string StartupDetail() => StartupDiagnostics.Summarize(_startupFailures.IsEmpty ? _startupMessages : _startupFailures);
     private static string I(object value) => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
-    public static int RecommendContext(ModelCatalogEntry model, GpuStatus gpu, ModelProfile? profile = null)
-    {
-        var available = Math.Max(0, gpu.TotalMiB - Math.Max(gpu.UsedMiB, 1536));
-        var baseMiB = model.BaseVramMiB > 0 ? model.BaseVramMiB : (int)Math.Ceiling(model.SizeBytes / 1024d / 1024d) + 1024;
-        var tiers = new[] { 524288, 262144, 200000, 131072, 65536, 32768 };
-        if (model.KvMiBPerKToken <= 0 || model.BaseVramMiB <= 0) throw new InvalidOperationException("Automatic context requires a calibrated memory profile for this model. Choose an explicit context in advanced settings.");
-        if (profile is not null && (profile.KvPrecision != model.RecommendedKvPrecision || profile.SpeculativeMode != model.RecommendedSpeculativeMode || profile.VisionEnabled != model.Vision))
-            throw new InvalidOperationException("Automatic context is not calibrated for these KV, speculation or vision settings. Use the recommended profile or choose an explicit context.");
-        var recommendation = tiers.Where(x => x <= model.MaximumContext)
-            .FirstOrDefault(x => baseMiB + model.KvMiBPerKToken * (x / 1000d) <= available);
-        if (recommendation == 0) throw new InvalidOperationException("The model and minimum supported context do not fit the available GPU memory. Free VRAM or select a smaller model.");
-        return recommendation;
-    }
     private static void Add(List<string> a, string n, object v) { a.Add(n); a.Add(I(v)); }
     public string BuildCommandPreview()
     {

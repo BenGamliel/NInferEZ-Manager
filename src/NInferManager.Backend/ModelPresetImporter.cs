@@ -16,6 +16,8 @@ public static class ModelPresetImporter
         if(!path.EndsWith(".ninferez.json",StringComparison.OrdinalIgnoreCase)||new FileInfo(path).Length>64*1024)throw new InvalidDataException("Choose a .ninferez.json preset smaller than 64 KiB.");
         using var document=JsonDocument.Parse(File.ReadAllText(path));var root=document.RootElement;
         if(root.GetProperty("schemaVersion").GetInt32()!=1)throw new InvalidDataException("This preset schema is not supported.");
+        var requirements=Requirements(root);
+        if(!ModelVersionPolicy.Meets(ProductInfo.Version,requirements.Manager))throw new InvalidDataException($"Update NInferEZ Manager to {requirements.Manager} or later before importing this preset.");
         var mode=root.GetProperty("mode").GetString();
         if(mode is not("exact" or "custom" or "automatic"))throw new InvalidDataException("Unsupported preset mode.");
         var identity=root.GetProperty("model");
@@ -45,6 +47,8 @@ public static class ModelPresetImporter
         if(r.TryGetProperty("draftTokens",out var draft))p.DraftTokens=draft.GetInt32();
         if(r.TryGetProperty("concurrency",out var concurrency))p.MaxConcurrency=concurrency.GetInt32();
         if(r.TryGetProperty("prefillChunk",out var prefill))p.PrefillChunk=prefill.GetInt32();
+        if(r.TryGetProperty("visionResidency",out var residency))p.VisionResidency=residency.GetString()??"resident";
+        if(r.TryGetProperty("cudaGraphAllowanceMiB",out var graphAllowance))p.CudaGraphAllowanceMiB=graphAllowance.ValueKind==JsonValueKind.Null?null:graphAllowance.GetInt32();
         if(r.TryGetProperty("gdnStateFp16",out var state))p.GdnStateFp16=state.GetBoolean();
         if(r.TryGetProperty("lmHeadDraft",out var head))p.LmHeadDraft=head.GetBoolean();
         if(r.TryGetProperty("ngramDraftTokens",out var ngram))p.NgramDraftTokens=ngram.GetInt32();
@@ -67,15 +71,27 @@ public static class ModelPresetImporter
         }
         return p;
     }
+    public static (string Manager,string Engine) Requirements(JsonElement root)
+    {
+        string Read(JsonElement value)
+        {
+            if(!value.TryGetProperty("minimumVersion",out var minimum))return "";
+            var text=minimum.GetString()??"";
+            if(!ModelVersionPolicy.IsValidMinimum(text))throw new InvalidDataException("The preset contains an invalid minimum version.");
+            return text;
+        }
+        return (root.TryGetProperty("manager",out var manager)?Read(manager):"", root.TryGetProperty("engine",out var engine)?Read(engine):"");
+    }
     public static string Export(ModelCatalogEntry model,ModelProfile p)
     {
         if(string.IsNullOrWhiteSpace(model.ExpectedSha256??model.Sha256))throw new InvalidOperationException("Verify this model once before exporting a portable preset. No artifact hash is known yet.");
         return JsonSerializer.Serialize(new
     {
         schemaVersion=1,profileName=model.DisplayName,mode=p.AutoContext?"automatic":"exact",
-        engine=new{minVersion="0.1.0-preview.1",contractVersion=1,requiredFeatures=Array.Empty<string>()},
+        manager=new{minimumVersion=model.MinimumManagerVersion},
+        engine=new{minimumVersion=model.MinimumEngineVersion,contractVersion=1,requiredFeatures=Array.Empty<string>()},
         model=new{fileName=model.FileName,sizeBytes=model.SizeBytes,sha256=model.ExpectedSha256??model.Sha256,formatVersion=3},
-        runtime=new{maxContext=p.MaxContext,kvCache=p.KvPrecision.ToString().ToLowerInvariant(),kvCapacity=p.KvCapacityMode==KvCapacityMode.Auto?(object)"auto":p.KvCapacityMode==KvCapacityMode.MatchContext?"matchContext":p.CustomKvCapacity,speculation=p.SpeculativeMode==SpeculativeMode.Disabled?"off":p.SpeculativeMode.ToString().ToLowerInvariant(),draftTokens=p.DraftTokens,vramReserveMiB=p.KvHeadroomMiB,concurrency=p.MaxConcurrency,prefillChunk=p.PrefillChunk,gdnStateFp16=p.GdnStateFp16,lmHeadDraft=p.LmHeadDraft,ngramDraftTokens=p.NgramDraftTokens,structuredOutput=p.StructuredOutput},
+        runtime=new{maxContext=p.MaxContext,kvCache=p.KvPrecision.ToString().ToLowerInvariant(),kvCapacity=p.KvCapacityMode==KvCapacityMode.Auto?(object)"auto":p.KvCapacityMode==KvCapacityMode.MatchContext?"matchContext":p.CustomKvCapacity,speculation=p.SpeculativeMode==SpeculativeMode.Disabled?"off":p.SpeculativeMode.ToString().ToLowerInvariant(),draftTokens=p.DraftTokens,vramReserveMiB=p.KvHeadroomMiB,concurrency=p.MaxConcurrency,prefillChunk=p.PrefillChunk,visionResidency=p.VisionResidency,cudaGraphAllowanceMiB=p.CudaGraphAllowanceMiB,gdnStateFp16=p.GdnStateFp16,lmHeadDraft=p.LmHeadDraft,ngramDraftTokens=p.NgramDraftTokens,structuredOutput=p.StructuredOutput},
         cache=new{hostCacheMiB=p.HostCacheMiB??p.HostKvMiB,alternativePrefixCache=p.AlternativePrefixCache},
         identityVerification=model.IdentityVerified?"verified":"unverified",managerProfile=p
     },SettingsService.JsonOptions);

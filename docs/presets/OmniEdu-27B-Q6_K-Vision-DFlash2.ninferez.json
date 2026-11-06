@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "profileName": "OmniEdu 27B Q6_K - 128K Q8 - Vision + DFlash2",
+  "mode": "exact",
+  "manager": {
+    "minimumVersion": "1.1.0"
+  },
+  "engine": {
+    "minimumVersion": "1.1.0",
+    "contractVersion": 1,
+    "requiredFeatures": [
+      "vision",
+      "dflash2",
+      "proposalHead",
+      "ngramDrafting"
+    ]
+  },
+  "model": {
+    "fileName": "OmniEdu-27B-Q6_K-Vision-DFlash2.ninfer",
+    "sizeBytes": 25813765120,
+    "sha256": "5c7e5b92d63ad2aeeee982702e22cf92c50d99a87fc12327b430230d3992a1a0",
+    "formatVersion": 3
+  },
+  "runtime": {
+    "maxContext": 131072,
+    "kvCache": "int8",
+    "kvCapacity": "matchContext",
+    "speculation": "dflash2",
+    "draftTokens": 7,
+    "concurrency": 1,
+    "prefillChunk": 512,
+    "visionResidency": "overlay",
+    "cudaGraphAllowanceMiB": 256,
+    "gdnStateFp16": false,
+    "lmHeadDraft": true,
+    "ngramDraftTokens": 15
+  },
+  "managerProfile": {
+    "manageAdvancedSettings": false,
+    "autoContext": false,
+    "visionEnabled": true,
+    "visionResidency": "overlay",
+    "cudaGraphAllowanceMiB": 256,
+    "maxContext": 131072,
+    "defaultMaxTokens": 32768,
+    "kvPrecision": "Int8",
+    "kvCapacityMode": "MatchContext",
+    "customKvCapacity": 131072,
+    "speculativeMode": "Dflash2",
+    "draftTokens": 7,
+    "lmHeadDraft": true,
+    "cudaGraphEnabled": true,
+    "prefixReuseEnabled": true,
+    "gdnStateFp16": false,
+    "prefillChunk": 512,
+    "maxConcurrency": 1,
+    "deviceStateSlots": 1,
+    "hostStateSlots": 0,
+    "hostKvMiB": 0,
+    "ngramDraftTokens": 15,
+    "thinkingEnabled": false,
+    "temperature": 1.0,
+    "topP": 0.95,
+    "topK": 20,
+    "minP": 0.0,
+    "presencePenalty": 0.0,
+    "frequencyPenalty": 0.0,
+    "preserveThinking": false
+  }
+}

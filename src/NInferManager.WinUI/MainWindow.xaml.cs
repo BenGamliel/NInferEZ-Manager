@@ -39,7 +39,6 @@ public sealed partial class MainWindow : Window
     private bool _refreshing;
     private bool _closing;
     private bool _exitPromptOpen;
-    private bool _checkingUpdates;
     private bool _apiEnabled=true;
     private string? _lastStatusEvent;
     private string? _lastDownloadEvent;
@@ -51,6 +50,7 @@ public sealed partial class MainWindow : Window
     private int _visibleLogTicks;
     private EngineState _engineState=EngineState.Unloaded;
     private GpuStatus? _fitGpu;
+    private ManagerStatus? _lastEngineStatus;
     private bool _hasActiveModel;
     private bool _sidebarExpanded=true;
     private string _activePage="dashboard";
@@ -214,7 +214,15 @@ public sealed partial class MainWindow : Window
         {
             InitializeTray();
             if(!InspectPortableUpdateJournal(false))return;
-            await _backend.EnsureStartedAsync();await ReloadAllAsync();ConfirmPortableUpdateLaunch();if(!string.IsNullOrWhiteSpace(_backend.SettingsRecoveryMessage))ShowGlobal("Settings recovered",_backend.SettingsRecoveryMessage,InfoBarSeverity.Warning);_timer.Start();_catalogNotificationTimer.Start();
+            await _backend.EnsureStartedAsync();
+            await CompleteProductUpdateAsync();
+            await ReloadAllAsync();
+            // The updater must not wait for a person to finish the optional setup dialog.
+            if(_productUpdateReady)ConfirmPortableUpdateLaunch();
+            await ShowFirstRunAsync();
+            if(_settings?.AutoCheckUpdates==true)_=CheckUpdateSilentlyAsync();
+            if(!string.IsNullOrWhiteSpace(_backend.SettingsRecoveryMessage))ShowGlobal("Settings recovered",_backend.SettingsRecoveryMessage,InfoBarSeverity.Warning);
+            _timer.Start();_catalogNotificationTimer.Start();
             if(_settings?.StartMinimized==true||Environment.GetCommandLineArgs().Contains("--minimized",StringComparer.OrdinalIgnoreCase))MinimizeToTray();
             else _=CheckModelAnnouncementsAsync();
         }
@@ -251,7 +259,7 @@ public sealed partial class MainWindow : Window
             ShowGlobal("Tray icon unavailable",ex.Message,InfoBarSeverity.Warning);
         }
     }
-    private async Task ReloadAllAsync(){_settings=await _backend.SettingsAsync();ApplyTheme();LoadSettingsControls();BuildAdvancedSettings();await RefreshModelsAsync();await RefreshStatusAsync();await RefreshEngineLibraryAsync();await RefreshRequestsAsync();await ShowFirstRunAsync();if(_settings?.AutoCheckUpdates==true)_=CheckUpdateSilentlyAsync();}
+    private async Task ReloadAllAsync(){_settings=await _backend.SettingsAsync();RestoreApplicationUpdateNotice();ApplyTheme();LoadSettingsControls();BuildAdvancedSettings();await RefreshModelsAsync();await RefreshStatusAsync();await RefreshEngineLibraryAsync();await RefreshRequestsAsync();}
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
         if(_dialogOpen||_closing)return ContentDialogResult.None;
@@ -311,11 +319,12 @@ public sealed partial class MainWindow : Window
         {
             var status=await _backend.StatusAsync(); if(status is null)return;
             _engineState=status.Engine;_hasActiveModel=!string.IsNullOrWhiteSpace(status.ActiveModelId);
-            if(status.Gpu?.TotalMiB!=_fitGpu?.TotalMiB||status.Gpu?.Name!=_fitGpu?.Name||status.Gpu?.DeviceIndex!=_fitGpu?.DeviceIndex)
-            {
-                _fitGpu=status.Gpu;
+            var gpuChanged=status.Gpu?.TotalMiB!=_fitGpu?.TotalMiB||status.Gpu?.Name!=_fitGpu?.Name||status.Gpu?.DeviceIndex!=_fitGpu?.DeviceIndex;
+            _fitGpu=status.Gpu;
+            _lastEngineStatus=status;
+            if(gpuChanged)
                 foreach(var item in _catalogModels)item.UpdateMemoryFit(_fitGpu);
-            }
+            UpdateContextFitText();
             var currentDefault=_catalogModels.FirstOrDefault(x=>x.ApiName.Equals(status.ActiveModelId,StringComparison.OrdinalIgnoreCase));
             if(currentDefault is not null&&currentDefault.Source.FileName!=_activeModel?.FileName){_activeModel=currentDefault.Source;UpdateProfileSummary();}
             _apiEnabled=status.ApiEnabled;ApiToggleButton.Content=_apiEnabled?"Turn off":"Turn on";ToolTipService.SetToolTip(ApiToggleButton,_apiEnabled?"Stop accepting API connections":"Start the public API listener");
@@ -512,14 +521,10 @@ public sealed partial class MainWindow : Window
         if(EnginePackagePicker.SelectedIndex<0||EnginePackagePicker.SelectedIndex>=_enginePackages.Count){EnginePackageActionButton.IsEnabled=false;return;}
         var package=_enginePackages[EnginePackagePicker.SelectedIndex];
         EnginePackageDetailText.Text=$"{package.GpuFamily} · {package.Qualification} · {(package.NativeNvfp4?"Native NVFP4":"GSQ-RCO and compatible formats")} · {package.SizeBytes/1024d/1024d:0} MiB";
-        EnginePackageActionButton.Content=package.Active?"Active engine":package.Installed?"Use this engine":"Download and install";
-        EnginePackageActionButton.IsEnabled=!package.Active&&_engineState is not (EngineState.Loading or EngineState.Ready or EngineState.Unloading);
+        EnginePackageActionButton.Content="Included in Manager updates";
+        EnginePackageActionButton.IsEnabled=false;
     }
-    private async void RefreshEngines_Click(object sender,RoutedEventArgs e)
-    {
-        try{await _backend.RefreshEnginesAsync();await RefreshEngineLibraryAsync();ShowInfoBar(EngineLibraryInfo,"Engine catalog refreshed","Verified packages were loaded from the official NInferEZ Engine channel.",InfoBarSeverity.Success);}
-        catch(Exception ex){ShowInfoBar(EngineLibraryInfo,"Could not refresh",ex.Message,InfoBarSeverity.Error);}
-    }
+    private async void RefreshEngines_Click(object sender,RoutedEventArgs e)=>await CheckForUpdatesAsync(true);
     private async void EnginePackageAction_Click(object sender,RoutedEventArgs e)
     {
         if(EnginePackagePicker.SelectedIndex<0||EnginePackagePicker.SelectedIndex>=_enginePackages.Count)return;
@@ -691,7 +696,7 @@ public sealed partial class MainWindow : Window
             ProfileEditor.Visibility=Visibility.Visible;NoInstalledProfile.Visibility=Visibility.Collapsed;
             var p=_profileModel.RecommendedProfile;if(_settings?.Profiles.TryGetValue(_profileModel.FileName,out var saved)==true)p=saved;
             _editingProfile=ProfileSettingsPolicy.Clone(p);
-            if(p.ManageAdvancedSettings)_editingProfile=ProfileSettingsPolicy.Managed(p,_profileModel.RecommendedProfile);
+            if(p.ManageAdvancedSettings)_editingProfile=ProfileSettingsPolicy.Managed(p,_profileModel.DefaultProfile);
             p=_editingProfile;ManageAdvancedBox.IsChecked=p.ManageAdvancedSettings;
             AutoContextBox.IsChecked=p.AutoContext;ContextBox.Maximum=Math.Max(1024,_profileModel.MaximumContext);ContextBox.Value=p.MaxContext;PrefillBox.Value=p.PrefillChunk;KvBox.SelectedIndex=(int)p.KvPrecision;
             RefreshSpeculativeChoices();
@@ -711,7 +716,7 @@ public sealed partial class MainWindow : Window
         {
             var selected=ReadProfileControls(!_editingProfile.ManageAdvancedSettings);
             selected.ManageAdvancedSettings=_editingProfile.ManageAdvancedSettings;
-            _editingProfile=ProfileSettingsPolicy.SwitchManagement(selected,ManageAdvancedBox.IsChecked==true,_profileModel.RecommendedProfile);
+            _editingProfile=ProfileSettingsPolicy.SwitchManagement(selected,ManageAdvancedBox.IsChecked==true,_profileModel.DefaultProfile);
             _loadingProfile=true;
             try{RefreshSpeculativeChoices();}finally{_loadingProfile=false;}
             RefreshAdvancedValues();UpdateSpeculativeControls();
@@ -731,7 +736,7 @@ public sealed partial class MainWindow : Window
         if(selected.Mode!=p.SpeculativeMode)
         {
             p.SpeculativeMode=selected.Mode;
-            _editingProfile=ProfileSettingsPolicy.Managed(p,_profileModel.RecommendedProfile);
+            if(p.ManageAdvancedSettings)_editingProfile=ProfileSettingsPolicy.Managed(p,_profileModel.DefaultProfile);
             ShowInfoBar(SettingsInfo,"Acceleration unavailable","The saved acceleration mode is not included in this model. Disabled is selected in the editor; Save profile to apply. Manual settings remain backed up.",InfoBarSeverity.Warning);
         }
         SpecBox.ItemsSource=choices;SpecBox.SelectedItem=selected;
@@ -748,6 +753,7 @@ public sealed partial class MainWindow : Window
             if(DraftBox.IsEnabled)p.DraftTokens=ReadWholeNumber(DraftBox,"Draft tokens");
             p.CudaGraphEnabled=CudaBox.IsChecked==true;p.PrefixReuseEnabled=PrefixBox.IsChecked==true;
             ApplyAdvancedValues(p,_advancedProfileControls);
+            if(_profileModel is not null)ProfileSettingsPolicy.ApplyVisionDefault(p,_profileModel.DefaultProfile);
         }
         p.ManageAdvancedSettings=ManageAdvancedBox.IsChecked==true;
         return p;
@@ -759,7 +765,7 @@ public sealed partial class MainWindow : Window
         {
             var p=ReadProfileControls(!_editingProfile.ManageAdvancedSettings);
             if(p.SpeculativeMode==SpeculativeMode.Mtp)p.DraftTokens=Math.Clamp(p.DraftTokens,1,5);
-            _editingProfile=p.ManageAdvancedSettings?ProfileSettingsPolicy.Managed(p,_profileModel.RecommendedProfile):p;
+            _editingProfile=p.ManageAdvancedSettings?ProfileSettingsPolicy.Managed(p,_profileModel.DefaultProfile):p;
             RefreshAdvancedValues();UpdateSpeculativeControls();
         }
         catch(InvalidOperationException){ /* Incomplete numeric edits are checked when saved. */ }
@@ -783,11 +789,39 @@ public sealed partial class MainWindow : Window
         var p=_editingProfile??_profileModel.RecommendedProfile;var managed=ManageAdvancedBox.IsChecked==true;
         DraftControlsPanel.Visibility=Visibility.Visible;DraftBox.IsEnabled=!managed&&choice.Mode!=SpeculativeMode.Disabled;
         PrefillBox.IsEnabled=CudaBox.IsEnabled=PrefixBox.IsEnabled=!managed;
-        ContextBox.IsEnabled=AutoContextBox.IsChecked!=true;
+        UpdateContextFitText();
         ManagementHint.Text=managed?"Managed: advanced values follow your basic choices. Your manual setup is kept separately; turn this off to restore it. Save profile to apply.":"Manual: your last advanced values are restored. Grey values are inactive and are not sent as incompatible engine flags. Save profile to apply.";
         SpecCapabilityText.Text=!_profileModel.Inspected?"Acceleration metadata is unknown. The existing setting is preserved; inspect with a compatible engine before choosing another mode.":!choice.ConfirmedSupported?"The imported setting is preserved, but this artifact does not report the required component. Choose a supported mode before loading.":"Only acceleration modes reported by this artifact are offered.";
         foreach(var (descriptor,input) in _advancedProfileControls)
             input.IsEnabled=!managed&&ProfileSettingsPolicy.IsApplicable(descriptor.Property,p,_profileModel.Vision);
+    }
+    private void UpdateContextFitText()
+    {
+        if(ContextFitText is null)return;
+        if(_profileModel is not { } model||_editingProfile is not {AutoContext:true} profile)
+        {
+            ContextFitText.Visibility=Visibility.Collapsed;
+            return;
+        }
+        ContextFitText.Visibility=Visibility.Visible;
+        var status=_lastEngineStatus;
+        if(status?.LastContextFit is { } fit&&fit.ModelFile.Equals(model.FileName,StringComparison.OrdinalIgnoreCase))
+        {
+            var running=status.Engine==EngineState.Ready&&status.LoadedContext==fit.Tokens&&status.LoadedModelFile==fit.ModelFile;
+            ContextFitText.Text=running?$"Selected context: {fit.Tokens:N0} tokens":$"Last fitted context: {fit.Tokens:N0} tokens";
+            return;
+        }
+        if(status?.Engine==EngineState.Loading)
+        {
+            ContextFitText.Text="Checking available GPU memory at load…";
+            return;
+        }
+        ContextFitText.Text=ModelMemoryFit.EstimateContext(model,_fitGpu,profile) switch
+        {
+            null=>"Estimated context: available after the first load.",
+            0=>"Estimated context: below 16,384 tokens. Fit will check at load.",
+            int estimate=>$"Estimated context: about {estimate:N0} tokens. Fit will verify at load."
+        };
     }
     private async void SaveSettings_Click(object sender,RoutedEventArgs e)
     {
@@ -796,14 +830,14 @@ public sealed partial class MainWindow : Window
         {
             var model=_profileModel;
             var p=ReadProfileControls(ManageAdvancedBox.IsChecked!=true);
-            if(p.ManageAdvancedSettings)p=ProfileSettingsPolicy.Managed(p,model.RecommendedProfile);
+            if(p.ManageAdvancedSettings)p=ProfileSettingsPolicy.Managed(p,model.DefaultProfile);
             else p.ManualAdvancedSettings=ProfileSettingsPolicy.CaptureAdvanced(p);
             await SavePreferencesAsync(new{profiles=new Dictionary<string,ModelProfile>{{model.FileName,p}}});
             await RefreshModelsAsync();ShowInfoBar(SettingsInfo,"Profile saved","Applies on the next load. The running model and its numerical settings have not changed.",InfoBarSeverity.Success);
         }
         catch(Exception ex){ShowInfoBar(SettingsInfo,"Could not save",ex.Message,InfoBarSeverity.Error);}
     }
-    private async void RestoreProfile_Click(object sender,RoutedEventArgs e){if(_settings is null||_profileModel is null)return;try{await SavePreferencesAsync(new{profiles=new Dictionary<string,ModelProfile>{{_profileModel.FileName,_profileModel.RecommendedProfile}}});LoadProfileControls();BuildAdvancedSettings();ShowGlobal("Profile restored","Recommended settings will apply on the next model load.",InfoBarSeverity.Success);}catch(Exception ex){ShowGlobal("Profile could not be restored",ex.Message,InfoBarSeverity.Error);}}
+    private async void RestoreProfile_Click(object sender,RoutedEventArgs e){if(_settings is null||_profileModel is null)return;try{await SavePreferencesAsync(new{profiles=new Dictionary<string,ModelProfile>{{_profileModel.FileName,_profileModel.DefaultProfile}}});LoadProfileControls();BuildAdvancedSettings();ShowGlobal("Profile restored","Recommended settings will apply on the next model load.",InfoBarSeverity.Success);}catch(Exception ex){ShowGlobal("Profile could not be restored",ex.Message,InfoBarSeverity.Error);}}
     private static int ReadWholeNumber(NumberBox input,string label){if(!double.IsFinite(input.Value)||input.Value!=Math.Round(input.Value)||input.Value<input.Minimum||input.Value>input.Maximum)throw new InvalidOperationException($"{label}: enter a whole number between {input.Minimum:N0} and {input.Maximum:N0}.");return checked((int)input.Value);}
     private async void RefreshLogs_Click(object sender,RoutedEventArgs e){try{await RefreshLogTextAsync();await RefreshRequestsAsync();}catch(Exception ex){ShowGlobal("Logs unavailable",ex.Message,InfoBarSeverity.Error);}}
     private async Task RefreshLogTextAsync()
@@ -843,7 +877,8 @@ public sealed partial class MainWindow : Window
         if(Models.Count==0)await RefreshModelsAsync();
         var engineSnapshot=await _backend.EnginesAsync();
         var availableEngines=engineSnapshot?.Packages.ToList()??[];
-        var needsEngine=string.IsNullOrWhiteSpace(engineSnapshot?.ActiveArchitecture);
+        var needsEngine=false;
+        if(string.IsNullOrWhiteSpace(engineSnapshot?.ActiveArchitecture))ShowGlobal("NInferEZ setup pending","Complete the Manager update to install its matching engine. This local build is waiting for approval.",InfoBarSeverity.Warning);
         var enginePicker=new ComboBox{HorizontalAlignment=HorizontalAlignment.Stretch};
         foreach(var engine in availableEngines)enginePicker.Items.Add($"{(engine.Recommended?"Recommended · ":"")}{FriendlyArchitecture(engine.CudaArchitecture)} · {engine.EngineVersion}{(engine.Installed?" · Installed":"")}");
         var recommendedIndex=availableEngines.FindIndex(x=>x.Recommended);enginePicker.SelectedIndex=recommendedIndex>=0?recommendedIndex:(availableEngines.Count>0?0:-1);
@@ -871,31 +906,6 @@ public sealed partial class MainWindow : Window
             await RefreshModelsAsync();await RefreshStatusAsync();
         }
     }
-
-    private async Task CheckForUpdatesAsync(bool interactive)
-    {
-        if(_checkingUpdates){if(interactive)ShowGlobal("Update already in progress","Wait for the current check or download to finish.",InfoBarSeverity.Informational);return;}
-        _checkingUpdates=true;
-        try
-        {
-            var update=await _backend.CheckUpdateAsync();if(update is null)return;
-            if(!update.UpdateAvailable){if(interactive)ShowGlobal("Up to date",update.Message,InfoBarSeverity.Success);return;}
-            if(string.IsNullOrWhiteSpace(update.AssetUrl)){ShowGlobal("Update available",update.Message,InfoBarSeverity.Warning);if(interactive&&update.ReleaseUrl is not null)Process.Start(new ProcessStartInfo(update.ReleaseUrl){UseShellExecute=true});return;}
-            ShowGlobal("Update available",update.Message,InfoBarSeverity.Informational);
-            if(!interactive)return;
-            var dialog=new ContentDialog{Title=$"Install NInferEZ Manager {update.LatestVersion}?",Content="The package will be downloaded and verified with SHA-256 before installation.",PrimaryButtonText="Download and install",SecondaryButtonText="View release",CloseButtonText="Later",DefaultButton=ContentDialogButton.Primary,XamlRoot=Root.XamlRoot};
-            var choice=await ShowDialogAsync(dialog);if(choice==ContentDialogResult.Secondary&&update.ReleaseUrl is not null){Process.Start(new ProcessStartInfo(update.ReleaseUrl){UseShellExecute=true});return;}if(choice!=ContentDialogResult.Primary)return;
-            await _backend.DownloadUpdateAsync(update);
-            ApplicationUpdatePanel.Visibility=Visibility.Visible;
-            var deadline=System.Diagnostics.Stopwatch.StartNew();
-            while(!_closing){await Task.Delay(500);var progress=await _backend.UpdateProgressAsync();if(progress is null){if(deadline.Elapsed>TimeSpan.FromSeconds(30))throw new InvalidOperationException("The updater did not report progress. No application files were replaced.");continue;}ApplicationUpdateText.Text=$"{progress.Stage} · {progress.Completed/1024d/1024d:0} MiB";ApplicationUpdateProgress.IsIndeterminate=progress.Total<=0;if(progress.Total>0)ApplicationUpdateProgress.Value=Math.Clamp(progress.Completed*100d/progress.Total,0,100);if(!progress.Running){if(progress.Error is not null)throw new InvalidOperationException(progress.Error);break;}}
-            if(_closing)return;
-            await _backend.ApplyUpdateAsync();_backend.ReleaseOwnershipForUpdate();_realExit=true;await Task.Delay(250);Close();
-        }
-        catch(Exception ex){if(interactive)ShowGlobal("Update failed",ex.Message,InfoBarSeverity.Error);}
-        finally{_checkingUpdates=false;ApplicationUpdatePanel.Visibility=Visibility.Collapsed;}
-    }
-    private async void CancelApplicationUpdate_Click(object sender,RoutedEventArgs e){try{await _backend.CancelUpdateAsync();}catch(Exception ex){ShowGlobal("Could not cancel update",ex.Message,InfoBarSeverity.Error);}}
 
     private void BuildAdvancedSettings()
     {
@@ -1002,7 +1012,7 @@ public sealed partial class MainWindow : Window
     private void InstallSettingsHelp()
     {
         AddControlHelp(ManageAdvancedBox,"Recommended for everyday use. The app adjusts dependent advanced values to your context, cache quality and acceleration choice. Switching this off restores your last manual advanced setup; Save profile applies it.");
-        AddControlHelp(AutoContextBox,"Managed: the engine sizes its context cache using free VRAM after loading the model. Manual: the catalog estimates a context size. Neither changes the model weights or your selected cache quality; some models still need more memory than your GPU has.");
+        AddControlHelp(AutoContextBox,"Estimates context from free GPU memory and past loads. It tries a smaller context if the estimate does not fit, with a minimum of 16,384 tokens.");
         AddControlHelp(ContextBox,"How much text a request can remember, including the answer. More tokens need more memory. This is an upper limit, not the amount currently loaded. Automatic fitting can allocate less.");
         AddControlHelp(KvBox,"Precision of the remembered context, not model weights. Higher precision uses more VRAM. Keep the recommended setting for the model unless you have checked quality and engine compatibility.");
         AddControlHelp(SpecBox,"Predicts several tokens ahead to speed generation. MTP and DFlash need matching components in the model. Disabled turns drafting off; its dependent controls become inactive.");
@@ -1076,6 +1086,20 @@ public sealed partial class MainWindow : Window
         catch(Exception ex){ShowGlobal("Could not exit safely",ex.Message,InfoBarSeverity.Error);}
         finally{_exitPromptOpen=false;}
     }
+    private bool _productUpdateReady;
+    private async Task CompleteProductUpdateAsync()
+    {
+        var state=await _backend.ProductUpdateAsync();
+        while(state?.Running==true || state?.Stage=="Pending")
+        {
+            ShowGlobal("Updating NInferEZ",state.Total>0?$"{state.Message} {state.Completed/1024d/1024d:0} / {state.Total/1024d/1024d:0} MiB":state.Message,InfoBarSeverity.Informational);
+            await Task.Delay(500);
+            state=await _backend.ProductUpdateAsync();
+        }
+        _productUpdateReady=state?.Ready==true;
+        if(!_productUpdateReady)ShowGlobal("Update incomplete",state?.Message??"The NInferEZ update could not be confirmed.",InfoBarSeverity.Warning);
+        else if(state?.Stage=="Awaiting approval")ShowGlobal("Local acceptance build",state.Message,InfoBarSeverity.Informational);
+    }
     private void ConfirmPortableUpdateLaunch()=>InspectPortableUpdateJournal(true);
     private bool InspectPortableUpdateJournal(bool confirmLaunch)
     {
@@ -1138,7 +1162,7 @@ public sealed class ModelItemView : System.ComponentModel.INotifyPropertyChanged
         foreach(var name in new[]{nameof(MemoryFitText),nameof(MemoryFitHelp),nameof(FitGreen),nameof(FitAmber),nameof(FitRed),nameof(MemoryFitVisibility)})
             PropertyChanged?.Invoke(this,new(name));
     }
-    public ModelItemView(ModelInfo x){Source=x;DisplayName=x.DisplayName;Repository=x.Repository;FileName=x.FileName;ApiName=x.ModelId;Weights=ModelPresentation.WeightSummary(x.Weights,x.FileName);SizeText=x.SizeText;ModelCardUrl=x.ModelCardUrl;Installed=x.Installed;Vision=x.Vision;VisionVisibility=x.Vision?Visibility.Visible:Visibility.Collapsed;DownloadAvailable=x.DownloadAvailable;DownloadVisibility=!x.Installed&&x.DownloadAvailable?Visibility.Visible:Visibility.Collapsed;InstalledVisibility=x.Installed?Visibility.Visible:Visibility.Collapsed;NewVisibility=x.IsNew?Visibility.Visible:Visibility.Collapsed;ActivateVisibility=x.Installed&&!x.Active?Visibility.Visible:Visibility.Collapsed;VerifyVisibility=x.Installed?Visibility.Visible:Visibility.Collapsed;DeleteVisibility=x.Installed||x.Missing?Visibility.Visible:Visibility.Collapsed;StateLabel=x.Missing?"File missing · locate the original artifact":x.Active?"Default · available through API":"Available through API";OriginText=x.Missing?"The linked file moved or is unavailable.":x.LinkedExternal?"External file · not copied":$"{x.Origin}{(!x.Inspected?" · metadata not verified":" · inspected")}";MissingVisibility=x.Missing?Visibility.Visible:Visibility.Collapsed;PresetText=x.PresetStatus??(x.Inspected?"Metadata inspected; full file identity is a separate check.":"Artifact metadata has not been verified.");}
+    public ModelItemView(ModelInfo x){Source=x;DisplayName=x.DisplayName;Repository=x.Repository;FileName=x.FileName;ApiName=x.ModelId;Weights=ModelPresentation.WeightSummary(x.Weights,x.FileName);SizeText=x.SizeText;ModelCardUrl=x.ModelCardUrl;Installed=x.Installed;Vision=x.Vision;VisionVisibility=x.Vision?Visibility.Visible:Visibility.Collapsed;DownloadAvailable=x.DownloadAvailable;DownloadVisibility=!x.Installed&&x.DownloadAvailable?Visibility.Visible:Visibility.Collapsed;InstalledVisibility=x.Installed?Visibility.Visible:Visibility.Collapsed;NewVisibility=x.IsNew?Visibility.Visible:Visibility.Collapsed;ActivateVisibility=x.Installed&&!x.Active?Visibility.Visible:Visibility.Collapsed;VerifyVisibility=x.Installed?Visibility.Visible:Visibility.Collapsed;DeleteVisibility=x.Installed||x.Missing?Visibility.Visible:Visibility.Collapsed;StateLabel=x.Missing?"File missing · locate the original artifact":x.Active?"Default · available through API":"Available through API";OriginText=x.Missing?"The linked file moved or is unavailable.":x.LinkedExternal?"External file · not copied":$"{x.Origin}{(!x.Inspected?" · metadata not verified":" · inspected")}";MissingVisibility=x.Missing?Visibility.Visible:Visibility.Collapsed;PresetText=x.UpdateRequirement??(!string.IsNullOrEmpty(x.MinimumEngineVersion)?$"Requires NInferEZ Manager and engine {x.MinimumEngineVersion} or later. ":"")+(x.PresetStatus??(x.Inspected?"Metadata inspected; full file identity is a separate check.":"Artifact metadata has not been verified."));}
     public ModelInfo Source{get;} public string DisplayName{get;} public string Repository{get;} public string FileName{get;} public string ApiName{get;} public string Weights{get;} public string SizeText{get;} public string ModelCardUrl{get;} public bool Installed{get;} public bool Vision{get;} public Visibility VisionVisibility{get;} public bool DownloadAvailable{get;} public Visibility DownloadVisibility{get;} public Visibility InstalledVisibility{get;} public Visibility NewVisibility{get;private set;} public Visibility ActivateVisibility{get;} public Visibility VerifyVisibility{get;} public Visibility DeleteVisibility{get;} public string StateLabel{get;}
     public string OriginText{get;}public string PresetText{get;}public Visibility MissingVisibility{get;}
 }

@@ -13,14 +13,14 @@ public sealed class UpdateService : IDisposable
     private const string ReleasesApi=ProductInfo.AppReleasesApi;
     private readonly AppPaths _paths;
     private readonly SettingsService _settings;
-    private readonly HttpClient _client=new(new SocketsHttpHandler{AutomaticDecompression=DecompressionMethods.All}){Timeout=Timeout.InfiniteTimeSpan};
+    private readonly HttpClient _client;
     private readonly SemaphoreSlim _downloadGate = new(1, 1);
     private UpdateInfo? _checked;
     private CancellationTokenSource? _downloadCancellation;
     private Task? _downloadTask;
     public string? VerifiedPackageSha256 { get; private set; }
     public UpdateProgress? Current{get;private set;}
-    public UpdateService(AppPaths paths,SettingsService settings){_paths=paths;_settings=settings;_client.DefaultRequestHeaders.UserAgent.ParseAdd("NInferEZ-Manager/0.1");}
+    public UpdateService(AppPaths paths,SettingsService settings,HttpClient? client=null){_paths=paths;_settings=settings;_client=client??new(new SocketsHttpHandler{AutomaticDecompression=DecompressionMethods.All}){Timeout=Timeout.InfiniteTimeSpan};_client.DefaultRequestHeaders.UserAgent.ParseAdd($"NInferEZ-Manager/{ProductInfo.Version}");}
 
     public async Task<UpdateInfo> CheckAsync(CancellationToken token=default)
     {
@@ -30,15 +30,30 @@ public sealed class UpdateService : IDisposable
         using var json=JsonDocument.Parse(await BoundedHttpContent.ReadTextAsync(response.Content,timeout.Token));
         var root=json.RootElement;var tag=root.GetProperty("tag_name").GetString()?.TrimStart('v')??"Unknown";
         var url=root.TryGetProperty("html_url",out var page)?page.GetString():null;
-        var available=Version.TryParse(tag,out var latest)&&latest>Version.Parse(CurrentVersion);
+        if(!Version.TryParse(tag,out var latest))return new(false,CurrentVersion,"Unknown",null,"The update service did not report a valid release version.");
+        var available=latest>Version.Parse(CurrentVersion);
         string? expected=_paths.IsPortable?$"NInferEZ-Manager-Portable-{tag}.zip":$"NInferEZ-Manager-Setup-{tag}.exe";
         JsonElement asset=default;var found=false;
         if(root.TryGetProperty("assets",out var assets))foreach(var item in assets.EnumerateArray())if(string.Equals(item.GetProperty("name").GetString(),expected,StringComparison.OrdinalIgnoreCase)){asset=item;found=true;break;}
-        _settings.Update(s=>s.LastUpdateCheckUtc=DateTimeOffset.UtcNow);
-        if(!available)return new(false,CurrentVersion,tag,url,"You are using the latest version.");
-        if(!found)return new(true,CurrentVersion,tag,url,$"Version {tag} is available, but the matching package was not found.");
-        var digest=asset.TryGetProperty("digest",out var d)?d.GetString():null;if(digest?.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)==true)digest=digest[7..];
-        return _checked = new(true,CurrentVersion,tag,url,$"Version {tag} is available.",expected,asset.GetProperty("browser_download_url").GetString(),digest,asset.GetProperty("size").GetInt64());
+        var offer = new UpdateInfo(available,CurrentVersion,tag,url,available
+            ? $"Version {tag} is available, but a verified package is not ready yet."
+            : "You are using the latest version.");
+        _checked=null;
+        if(available&&found)
+        {
+            var digest=asset.TryGetProperty("digest",out var d)?d.GetString():null;
+            if(digest?.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)==true)digest=digest[7..];
+            var candidate=new UpdateInfo(true,CurrentVersion,tag,url,$"Version {tag} is available.",expected,
+                asset.TryGetProperty("browser_download_url",out var assetUrl)?assetUrl.GetString():null,
+                digest,asset.TryGetProperty("size",out var size)&&size.TryGetInt64(out var bytes)?bytes:0);
+            if(HasSafePackage(candidate))offer=_checked=candidate;
+        }
+        _settings.Update(s=>
+        {
+            s.LastUpdateCheckUtc=DateTimeOffset.UtcNow;
+            s.AvailableApplicationUpdate=available?new(tag,offer.AssetUrl is not null):null;
+        });
+        return offer;
     }
 
     public void StartDownload(UpdateInfo update)
@@ -58,20 +73,24 @@ public sealed class UpdateService : IDisposable
     private void ValidatePackage(UpdateInfo update)
     {
         if (_checked is null || update != _checked) throw new InvalidOperationException("Check for updates again before downloading. Only the backend-verified release is accepted.");
-        if (string.IsNullOrWhiteSpace(update.AssetName) || Path.GetFileName(update.AssetName)!=update.AssetName || string.IsNullOrWhiteSpace(update.Sha256) || update.Sha256.Length!=64 || !update.Sha256.All(Uri.IsHexDigit)
-            || update.AssetSize is <=0 or > 1024L*1024*1024 || !Uri.TryCreate(update.AssetUrl,UriKind.Absolute,out var uri) || uri.Scheme!="https" || uri.Host!="github.com" || !uri.AbsolutePath.StartsWith("/BenGamliel/NInferEZ-Manager/releases/download/",StringComparison.Ordinal))
-            throw new InvalidDataException("The release has no safe verifiable update package.");
+        if(!HasSafePackage(update))throw new InvalidDataException("The release has no safe verifiable update package.");
     }
+    private static bool HasSafePackage(UpdateInfo update) =>
+        !string.IsNullOrWhiteSpace(update.AssetName) && Path.GetFileName(update.AssetName)==update.AssetName &&
+        update.Sha256 is {Length:64} && update.Sha256.All(Uri.IsHexDigit) &&
+        update.AssetSize is >0 and <=1024L*1024*1024 && Uri.TryCreate(update.AssetUrl,UriKind.Absolute,out var uri) &&
+        uri.Scheme=="https" && uri.Host=="github.com" && uri.AbsolutePath.StartsWith("/BenGamliel/NInferEZ-Manager/releases/download/",StringComparison.Ordinal);
 
     public async Task DownloadAsync(UpdateInfo update,CancellationToken token)
     {
         ValidatePackage(update);
         if(!await _downloadGate.WaitAsync(0,token))throw new InvalidOperationException("Another update download is running.");
         VerifiedPackageSha256=null;
-        var directory=Path.Combine(_paths.DataDirectory,"Updates");Directory.CreateDirectory(directory);
+        var directory=Path.Combine(_paths.DataDirectory,"Updates");
         var destination=Path.Combine(directory,update.AssetName!);var partial=destination+".part";
         try
         {
+            Directory.CreateDirectory(directory);
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromMinutes(15));
             using var response=await _client.GetAsync(update.AssetUrl,HttpCompletionOption.ResponseHeadersRead,timeout.Token);response.EnsureSuccessStatusCode();
             long completed=0;

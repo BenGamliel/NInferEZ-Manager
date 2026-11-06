@@ -70,9 +70,9 @@ public sealed class BackendClient : IDisposable
         catch { StopOwnedProcess(); throw; }
     }
 
-    private async Task<T?> GetAsync<T>(string route)
+    private async Task<T?> GetAsync<T>(string route,TimeSpan? timeout=null)
     {
-        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);deadline.CancelAfter(TimeSpan.FromSeconds(15));
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);deadline.CancelAfter(timeout??TimeSpan.FromSeconds(15));
         using var response = await _http.GetAsync(route, deadline.Token);
         await CheckAsync(response);
         return await response.Content.ReadFromJsonAsync<T>(_json, deadline.Token);
@@ -89,6 +89,8 @@ public sealed class BackendClient : IDisposable
         return string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<ApiResult>(body, _json);
     }
 
+    public Task<ProductUpdateState?> ProductUpdateAsync() => GetAsync<ProductUpdateState>("/control/v1/update/completion");
+    public async Task CompleteProductUpdateAsync()=>await SendAsync(HttpMethod.Post,"/control/v1/update/complete");
     public Task<ManagerStatus?> StatusAsync() => GetAsync<ManagerStatus>("/control/v1/status");
     public async Task<ConversionCapabilities?> ConversionCapabilitiesAsync()
     {
@@ -143,7 +145,8 @@ public sealed class BackendClient : IDisposable
     public Task<RequestMetricsSnapshot?> RequestsAsync() => GetAsync<RequestMetricsSnapshot>("/control/v1/requests");
     private async Task<string> GetTextAsync(string route){using var deadline=CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);deadline.CancelAfter(TimeSpan.FromSeconds(15));using var response=await _http.GetAsync(route,deadline.Token);await CheckAsync(response);return await response.Content.ReadAsStringAsync(deadline.Token);}
     public Task<string> LogsAsync()=>GetTextAsync("/control/v1/logs");
-    public Task<UpdateInfo?> CheckUpdateAsync() => GetAsync<UpdateInfo>("/control/v1/update");
+    public Task<UpdateInfo?> CheckUpdateAsync() => GetAsync<UpdateInfo>("/control/v1/update",TimeSpan.FromSeconds(30));
+    public async Task DismissUpdateAsync(string version) => await SendAsync(HttpMethod.Post,"/control/v1/update/dismiss",new{version});
     public async Task DownloadUpdateAsync(UpdateInfo update) => await SendAsync(HttpMethod.Post, "/control/v1/update/download", update);
     public Task<UpdateProgress?> UpdateProgressAsync() => GetAsync<UpdateProgress>("/control/v1/update/progress");
     public async Task ApplyUpdateAsync() => await SendAsync(HttpMethod.Post, "/control/v1/update/apply", new { uiProcessId = Environment.ProcessId });

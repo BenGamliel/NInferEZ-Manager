@@ -21,6 +21,7 @@ public sealed class ModelDownloadService : IDisposable
 
     public void Start(ModelCatalogEntry entry)
     {
+        ModelVersionPolicy.Require(entry);
         lock (_operationSync)
         {
             if(_operation is {IsCompleted:false})throw new InvalidOperationException("Another model download is already running.");
@@ -39,6 +40,7 @@ public sealed class ModelDownloadService : IDisposable
 
     public async Task DownloadAsync(ModelCatalogEntry entry, CancellationToken token)
     {
+        ModelVersionPolicy.Require(entry);
         if (!await _downloadGate.WaitAsync(0, token)) throw new InvalidOperationException("Another model download is already running.");
         try
         {

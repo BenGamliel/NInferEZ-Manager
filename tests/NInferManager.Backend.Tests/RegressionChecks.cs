@@ -120,6 +120,24 @@ internal static class RegressionChecks
             using var after=await client.PostAsync($"http://127.0.0.1:{publicPort}/v1/chat/completions",new StringContent(JsonSerializer.Serialize(new{model=settings.ModelIdFor(local),messages=Array.Empty<object>()}),Encoding.UTF8,"application/json"));
             assert(after.IsSuccessStatusCode&&engine.State==EngineState.Unloaded,"immediate policy unloads only after response completion");
         }
+        settings.Update(s=>s.Profiles[local.FileName].AutoContext=true);
+        Environment.SetEnvironmentVariable("NINFEREZ_FAKE_CONTEXT_LIMIT","50123");
+        try
+        {
+            await engine.LoadAsync();
+            assert(engine.IsLoaded&&engine.Session?.Profile.MaxContext==49152
+                && engine.LastContextFit==new ContextFitResult(local.FileName,49152)
+                && engine.Session.Profile.KvPrecision==p.KvPrecision
+                && settings.Current.Profiles[local.FileName].MaxContext==65536,
+                "automatic context fit retries the native launch, reports the verified context and retains the saved ceiling and KV quality");
+            await engine.UnloadAsync("host-only fit unload");
+            assert(engine.LastContextFit?.Tokens==49152,"last successful fit remains available after unload");
+
+            Environment.SetEnvironmentVariable("NINFEREZ_FAKE_CONTEXT_LIMIT","16000");
+            try{await engine.LoadAsync();throw new Exception("Expected automatic fit to fail below the floor.");}
+            catch(InvalidOperationException error){assert(error.Message.Contains("16,384")&&!engine.IsLoaded&&engine.Session is null,"fit fails cleanly when even 16K cannot load");}
+        }
+        finally{Environment.SetEnvironmentVariable("NINFEREZ_FAKE_CONTEXT_LIMIT",null);}
         Environment.SetEnvironmentVariable("NINFEREZ_FAKE_READY_DELAY","4000");
         try
         {

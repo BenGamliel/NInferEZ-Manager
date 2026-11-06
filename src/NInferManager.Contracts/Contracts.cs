@@ -34,12 +34,16 @@ public sealed record ManagerStatus(
     DateTimeOffset UpdatedAt)
 {
     public string? LoadedModelId { get; init; }
+    public string? LoadedModelFile { get; init; }
     public int? LoadedContext { get; init; }
     public int? LoadedBackendPort { get; init; }
     public string? LoadedEngineArchitecture { get; init; }
     public string? LoadedEngineVersion { get; init; }
     public bool ApiEnabled { get; init; } = true;
+    public ContextFitResult? LastContextFit { get; init; }
 }
+
+public sealed record ContextFitResult(string ModelFile, int Tokens);
 
 public sealed record EngineOperationStatus(
     string? OperationId,
@@ -55,6 +59,8 @@ public sealed record GpuStatus(string Name, int UsedMiB, int TotalMiB, int Utili
 {
     public int DeviceIndex { get; init; }
     public string? Uuid { get; init; }
+    public int? FreeMiB { get; init; }
+    public int AvailableMiB => FreeMiB ?? Math.Max(0, TotalMiB - UsedMiB);
 }
 
 public sealed class ManagerSettings
@@ -74,6 +80,8 @@ public sealed class ManagerSettings
     public bool AutoCheckUpdates { get; set; } = true;
     public int UpdateCheckHours { get; set; } = 24;
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
+    public ApplicationUpdateNotice? AvailableApplicationUpdate { get; set; }
+    public string? DismissedUpdateVersion { get; set; }
     public int PublicPort { get; set; } = 8173;
     public bool LockPublicPort { get; set; }
     public bool AllowLocalNetwork { get; set; }
@@ -96,6 +104,8 @@ public sealed class ModelProfile
     public Dictionary<string, System.Text.Json.JsonElement>? ManualAdvancedSettings { get; set; }
     public bool AutoContext { get; set; } = true;
     public bool VisionEnabled { get; set; } = true;
+    public string VisionResidency { get; set; } = "resident";
+    public int? CudaGraphAllowanceMiB { get; set; }
     public int MaxContext { get; set; } = 200_000;
     public int DefaultMaxTokens { get; set; } = 200_000;
     public KvPrecision KvPrecision { get; set; } = KvPrecision.Fp8;
@@ -166,7 +176,12 @@ public sealed record ModelInfo(
     bool Featured = false,
     bool IsNew = false)
 {
+    // RecommendedProfile carries the saved selection for existing model consumers.
+    public ModelProfile DefaultProfile { get; init; } = RecommendedProfile;
     public string Origin { get; init; } = "Remote";
+    public string MinimumManagerVersion { get; init; } = "";
+    public string MinimumEngineVersion { get; init; } = "";
+    public string? UpdateRequirement { get; init; }
     public bool Inspected { get; init; }
     public bool LinkedExternal { get; init; }
     public bool Missing { get; init; }
@@ -192,6 +207,8 @@ public sealed record ModelInfo(
         : $"https://huggingface.co/{Repository}/blob/{Revision}/{Uri.EscapeDataString(RemoteFileName)}";
     public string SizeText => SizeBytes <= 0 ? "Unknown" : $"{SizeBytes / 1024d / 1024d / 1024d:0.00} GiB";
 }
+
+public sealed record ProductUpdateState(string Stage, bool Running, bool Ready, string Message, long Completed = 0, long Total = 0, string? Error = null);
 
 public sealed record DownloadState(string ModelFile, string Stage, long Completed, long Total, double BytesPerSecond, bool Running, string? Error = null);
 
@@ -229,6 +246,7 @@ public sealed record UpdateInfo(
     string? Sha256 = null,
     long AssetSize = 0);
 
+public sealed record ApplicationUpdateNotice(string Version, bool CanInstall);
 public sealed record UpdateProgress(string Stage, long Completed, long Total, bool Running, string? Error = null, string? PackagePath = null);
 
 public sealed record EnginePackageInfo(

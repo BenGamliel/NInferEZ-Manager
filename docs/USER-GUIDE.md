@@ -1,14 +1,15 @@
-# NInferEZ Manager 1.0.0 — user guide
+# NInferEZ Manager 1.1.0 — user guide
 
 ## Start with a model, not a terminal
 
 Install Manager or extract the complete Portable package to a writable folder. Keep the EXE,
 Backend and Assets together. A Portable is launched from its extracted folder, not from the ZIP.
 
-On first launch, **Engine** recommends a package for the detected GPU. Confirm the choice and let
-download and verification finish. You can choose manually, but a package for another architecture
-is not an upgrade. Engine setup happens in the application; the Windows installer does not require
-you to understand CUDA flags. If an existing valid engine is present, it can be used offline.
+On first launch, Manager automatically sets up the exact engine package pinned
+for the detected GPU architecture. Let its download and integrity verification
+finish before loading a model. **Engine** shows runtime details; engine changes
+arrive through Manager updates. An already-installed matching verified pin can
+be reused offline. A package for another architecture is not an upgrade.
 
 On **Models**, open the displayed Models folder and put a supported `.ninfer` file there, or
 **Link a model** from another location. A link does not duplicate the file. Refresh the library if
@@ -104,14 +105,15 @@ Ordinary preferences save automatically. Invalid input is not silently applied. 
 their local save/restore actions; changes to API port, key or network scope use the explicit Apply
 action so that a partially typed port does not restart the listener.
 
-Engine management stays on **Engine**, not inside Settings. Selected package and currently running
-package can differ until a safe unload/reload. Engine downloads are verified separately from model
-downloads and app updates. Never replace DLLs inside a running engine by hand.
+The **Engine** page shows selected/runtime details. Manager updates own the exact
+engine version and verified archive for each supported architecture. There is no
+independent engine update to choose. Never replace DLLs inside a running engine.
 
-RTX 3000/4000/5000 Series packages are architecture choices, not proof of qualification on each
-card. Community Preview means that a combination still needs actual hardware testing. Native
-NVFP4 is not implied on older architectures. Driver, artifact components and available VRAM matter
-as well as the card family.
+RTX 5090 has real sm120a hardware qualification. Corrected sm86/sm89 packages are
+build-verified previews, with matching RTX 3000/RTX 4000 hardware untested here.
+Other sm120a cards also remain hardware-unverified. Native NVFP4 is not implied
+on older architectures. Driver, artifact components and available VRAM still
+matter; a matching target does not mean every card/model/profile was tested.
 
 ## LAN and VPN clients
 
@@ -136,18 +138,28 @@ arbitrary text is anonymous.
 
 ## Updates and data
 
-Check for app updates in Maintenance. Checking does not automatically install. A verified update
-is applied only with your approval; an active inference must finish or be deliberately stopped.
-App updates should preserve Models, settings, logs and engines. Portable recovery files are retained
-until startup is confirmed or recovery has completed; do not delete them during an update.
-An Installed update launched by Manager requests an application relaunch after installation.
-Normal manual installation keeps its usual optional launch choice. Installer relaunch/upgrade is
-a separate interactive acceptance check, not proof supplied by the host regression tests.
+Use **Check for updates** in Maintenance or the tray for an immediate check.
+Automatic checks run at startup when enabled and the saved interval has elapsed
+(24 hours by default). An already-open1.0.0 window has no continuous update-push
+subscription. Checking never installs automatically: approve the Manager update,
+then its matching pinned engine is set up automatically after the app restarts.
+An active inference must finish or be deliberately stopped before replacement.
+
+Updates preserve models, saved profiles, logs and existing engine versions. Setup
+also removes a portable.mode marker already in its target so future installed
+updates choose Setup. Portable updates retain that marker. The original 1.0.0
+helper's app-file recovery and engine selection are not one atomic transaction;
+keep recovery files if startup/setup is interrupted. Installed updates request
+relaunch after installation. See [the update contract](UPDATES-1.1.0.md) for exact
+verification, retry and recovery behavior.
+
+OmniEdu requires Manager 1.1.0 and actual Engine 1.1.0 or later. Manager 1.1.0 uses
+the versioned catalog and enforces both requirements. This requirement does not
+promise that every GPU can fit the recommended 128K profile.
 
 Portable data stays beside the application. Installed data uses the per-user Manager data root.
 Uninstall retains managed data by default; explicit removal never follows external model links.
-Back up your profiles and settings before manual directory changes. A ready-to-test Portable may
-contain local configuration and must not be uploaded as a clean public package.
+Back up your profiles and settings before manual directory changes. Keep local test data separate from clean distribution packages.
 
 ## Quick troubleshooting
 
@@ -163,5 +175,4 @@ contain local configuration and must not be uploaded as a clean public package.
 | Save rejected | Field range, profile compatibility or stale settings revision; refresh rather than overwriting other changes |
 | Update failed | Keep recovery directory and prior package; inspect logs and recovery guidance before manual deletion |
 
-This guide describes the intended supported workflows. Build-specific verification and remaining
-manual/GPU checks are recorded in the acceptance evidence accompanying the development package.
+Release-specific verification and hardware coverage are recorded in the accompanying release evidence.

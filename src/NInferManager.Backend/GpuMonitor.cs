@@ -8,16 +8,16 @@ public static class GpuMonitor
     private static readonly SemaphoreSlim Gate=new(1,1);
     private static IReadOnlyList<GpuStatus> _cached = [];
     private static DateTime _cachedAt=DateTime.MinValue;
-    public static async Task<GpuStatus?> ReadAsync(int deviceIndex = 0) => (await ReadAllAsync()).FirstOrDefault(x => x.DeviceIndex == deviceIndex);
-    public static async Task<IReadOnlyList<GpuStatus>> ReadAllAsync()
+    public static async Task<GpuStatus?> ReadAsync(int deviceIndex = 0, bool fresh = false) => (await ReadAllAsync(fresh)).FirstOrDefault(x => x.DeviceIndex == deviceIndex);
+    public static async Task<IReadOnlyList<GpuStatus>> ReadAllAsync(bool fresh = false)
     {
-        if(DateTime.UtcNow-_cachedAt<TimeSpan.FromSeconds(10))return _cached;
+        if(!fresh&&DateTime.UtcNow-_cachedAt<TimeSpan.FromSeconds(10))return _cached;
         await Gate.WaitAsync();
         try
         {
-            if(DateTime.UtcNow-_cachedAt<TimeSpan.FromSeconds(10))return _cached;
-            using var p = Process.Start(new ProcessStartInfo("nvidia-smi.exe", "--query-gpu=index,uuid,name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader,nounits") { UseShellExecute=false, CreateNoWindow=true, RedirectStandardOutput=true, RedirectStandardError=true });
-            if (p is null) return _cached;
+            if(!fresh&&DateTime.UtcNow-_cachedAt<TimeSpan.FromSeconds(10))return _cached;
+            using var p = Process.Start(new ProcessStartInfo("nvidia-smi.exe", "--query-gpu=index,uuid,name,memory.used,memory.total,utilization.gpu,temperature.gpu,memory.free --format=csv,noheader,nounits") { UseShellExecute=false, CreateNoWindow=true, RedirectStandardOutput=true, RedirectStandardError=true });
+            if (p is null) return fresh ? [] : _cached;
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             try
             {
@@ -28,9 +28,9 @@ public static class GpuMonitor
                 await error;
                 return _cached;
             }
-            catch (OperationCanceledException) { try { p.Kill(true); await p.WaitForExitAsync(); } catch { } return _cached; }
+            catch (OperationCanceledException) { try { p.Kill(true); await p.WaitForExitAsync(); } catch { } return fresh ? [] : _cached; }
         }
-        catch { return _cached; }
+        catch { return fresh ? [] : _cached; }
         finally{_cachedAt=DateTime.UtcNow;Gate.Release();}
     }
     public static IReadOnlyList<GpuStatus> Parse(string output)
@@ -41,7 +41,8 @@ public static class GpuMonitor
             var f = line.Split(',').Select(x => x.Trim()).ToArray();
             if (f.Length < 7 || !int.TryParse(f[0], out var index) || !int.TryParse(f[3], out var used) || !int.TryParse(f[4], out var total)) continue;
             int.TryParse(f[5], out var utilization); int.TryParse(f[6], out var temperature);
-            list.Add(new(f[2], used, total, utilization, temperature) { DeviceIndex = index, Uuid = f[1] });
+            int? free = f.Length >= 8 && int.TryParse(f[7], out var freeMiB) && freeMiB >= 0 && freeMiB <= total ? freeMiB : null;
+            list.Add(new(f[2], used, total, utilization, temperature) { DeviceIndex = index, Uuid = f[1], FreeMiB = free });
         }
         return list;
     }

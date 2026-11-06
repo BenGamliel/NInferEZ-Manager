@@ -74,6 +74,15 @@ internal static class ProfilePolicyChecks
         Invalid(p=>{p.AlternativePrefixCache=true;p.PrefixReuseEnabled=false;},"Alternative prefix caching");
         var mediaOff=SettingsService.Clone(manual);mediaOff.MediaLiveMiB=0;mediaOff.MediaPreprocessThreads=100;
         SettingsService.ValidateProfile(mediaOff);check(true,"inactive vision preferences do not cause a launch validation error");
+        mediaOff.MediaPreprocessThreads=0;
+        var managedMediaOff=ProfileSettingsPolicy.SwitchManagement(mediaOff,true,recommended);
+        managedMediaOff.VisionEnabled=true;
+        var restoredVision=ProfileSettingsPolicy.SwitchManagement(managedMediaOff,false,recommended);
+        SettingsService.ValidateProfile(restoredVision);
+        check(restoredVision.MediaLiveMiB==2048 && !restoredVision.ManageAdvancedSettings,"restoring a manual profile with a legacy zero budget uses the Vision default");
+        restoredVision.MediaLiveMiB=4096;
+        ProfileSettingsPolicy.ApplyVisionDefault(restoredVision,recommended);
+        check(restoredVision.MediaLiveMiB==4096,"enabling Vision preserves an existing positive manual budget");
         recommended.PrefillChunk=1000;manual.ManageAdvancedSettings=true;
         var rounded=ProfileSettingsPolicy.Managed(manual,recommended);
         check(rounded.PrefillChunk==896,"managed prefill always respects engine 128-token batching without changing basic choices");

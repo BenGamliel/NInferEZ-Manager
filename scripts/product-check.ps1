@@ -14,9 +14,9 @@ function Check([bool]$Condition, [string]$Message) {
 $props = Get-Content -LiteralPath (Join-Path $projectRoot 'Directory.Build.props') -Raw
 $productInfo = Get-Content -LiteralPath (Join-Path $projectRoot 'src/NInferManager.Backend/ProductInfo.cs') -Raw
 $installer = Get-Content -LiteralPath (Join-Path $projectRoot 'installer/NInferEZManager.iss') -Raw
-Check ($props -match '<Version>1\.0\.0</Version>') 'Assembly product version is 1.0.0'
-Check ($productInfo -match 'const string Version\s*=\s*"1\.0\.0"') 'Backend product version is 1.0.0'
-Check ($installer -match '#define AppVersion "1\.0\.0"') 'Installer product version is 1.0.0'
+Check ($props -match '<Version>1\.1\.0</Version>') 'Assembly product version is 1.1.0'
+Check ($productInfo -match 'const string Version\s*=\s*"1\.1\.0"') 'Backend product version is 1.1.0'
+Check ($installer -match '#define AppVersion "1\.1\.0"') 'Installer product version is 1.1.0'
 Check ($installer -match 'PrivilegesRequired=lowest') 'Installer is per-user without elevation'
 Check ($installer -match 'MB_YESNO or MB_DEFBUTTON2') 'Uninstall data removal defaults to No'
 Check ($installer -notmatch 'DelTree\(.*\{(?:userprofile|localappdata|app)\}[''"],') 'Uninstall does not recursively remove a broad root'

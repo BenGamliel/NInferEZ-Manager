@@ -123,7 +123,18 @@
 
                 <StackPanel Grid.Row="1" Margin="24,12,24,0" Spacing="8">
                     <InfoBar x:Name="GlobalInfo" IsOpen="False" IsClosable="True" />
-                    <Border x:Name="ApplicationUpdatePanel" Style="{StaticResource CompactCardStyle}" Visibility="Collapsed"><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="6"><TextBlock x:Name="ApplicationUpdateText" Text="Preparing application update" /><ProgressBar x:Name="ApplicationUpdateProgress" Minimum="0" Maximum="100" /></StackPanel><Button Grid.Column="1" Content="Cancel" Click="CancelApplicationUpdate_Click" VerticalAlignment="Center" /></Grid></Border>
+                    <InfoBar x:Name="ApplicationUpdateNoticeBar" Title="Update available" IsOpen="False" IsClosable="True" CloseButtonClick="ApplicationUpdateNotice_CloseButtonClick">
+                        <InfoBar.ActionButton>
+                            <Button x:Name="NoticeInstallUpdateButton" Content="Download and install" Click="InstallApplicationUpdate_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                    <Border x:Name="ApplicationUpdatePanel" Style="{StaticResource CompactCardStyle}" Visibility="Collapsed">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="6"><TextBlock x:Name="ApplicationUpdateText" Text="Preparing application update" TextWrapping="Wrap" /><ProgressBar x:Name="ApplicationUpdateProgress" Minimum="0" Maximum="100" /></StackPanel>
+                            <Button x:Name="CancelApplicationUpdateButton" Grid.Column="1" Content="Cancel" Click="CancelApplicationUpdate_Click" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
                 </StackPanel>
 
                 <Grid Grid.Row="2">
@@ -566,9 +577,9 @@
                                     <Grid ColumnSpacing="12">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <StackPanel Spacing="4"><TextBlock Text="ENGINE LIBRARY" Style="{StaticResource CaptionStyle}" FontSize="9" CharacterSpacing="100" /><TextBlock Text="Hardware-matched NInferEZ Engine packages" Style="{StaticResource SectionTitleStyle}" /><TextBlock x:Name="EngineRecommendationText" Text="Detecting the recommended package…" Style="{StaticResource MutedStyle}" TextWrapping="Wrap" /></StackPanel>
-                                        <Button Grid.Column="1" Content="Refresh catalog" Click="RefreshEngines_Click" VerticalAlignment="Bottom" />
+                                        <Button Grid.Column="1" Content="Check for updates" Click="RefreshEngines_Click" VerticalAlignment="Bottom" />
                                     </Grid>
-                                    <ComboBox x:Name="EnginePackagePicker" Header="Available engine packages" SelectionChanged="EnginePackagePicker_SelectionChanged" HorizontalAlignment="Stretch" />
+                                    <ComboBox x:Name="EnginePackagePicker" Header="Installed runtime details" SelectionChanged="EnginePackagePicker_SelectionChanged" HorizontalAlignment="Stretch" />
                                     <TextBlock x:Name="EnginePackageDetailText" Text="Select a package to see compatibility and installation state." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
                                     <StackPanel Orientation="Horizontal" Spacing="9"><Button x:Name="EnginePackageActionButton" Content="Install engine" Click="EnginePackageAction_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" IsEnabled="False" /><Button x:Name="CancelEngineInstallButton" Content="Cancel download" Click="CancelEngineInstall_Click" Visibility="Collapsed" /></StackPanel>
                                     <StackPanel x:Name="EngineInstallProgressPanel" Spacing="6" Visibility="Collapsed"><ProgressBar x:Name="EngineInstallProgressBar" Minimum="0" Maximum="100" /><TextBlock x:Name="EngineInstallProgressText" Style="{StaticResource CaptionStyle}" /></StackPanel>
@@ -606,7 +617,8 @@
                                                 <TextBlock x:Name="ManagementHint" Text="Recommended: dependent controls follow your choices. Turn off to restore your last manual advanced settings." Style="{StaticResource CaptionStyle}" />
                                                 <TextBlock Text="Context and memory" Style="{StaticResource CardTitleStyle}" />
                                                 <CheckBox x:Name="AutoContextBox" Content="Fit the context cache to available VRAM" Checked="BasicProfile_Changed" Unchecked="BasicProfile_Changed" />
-                                                <TextBlock Text="Managed mode asks the engine to fit its cache after loading the weights. Your chosen KV quality stays unchanged. Manual mode uses the catalog estimate, which may not fit every GPU." Style="{StaticResource CaptionStyle}" />
+                                                <TextBlock Text="Fit estimates a context from free GPU memory at the next load, between 16,384 tokens and Context limit." Style="{StaticResource CaptionStyle}" />
+                                                <TextBlock x:Name="ContextFitText" Style="{StaticResource CaptionStyle}" Visibility="Collapsed" />
                                                 <Grid ColumnSpacing="12" RowSpacing="12">
                                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                                                     <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
@@ -655,9 +667,9 @@
                                     <Border Style="{StaticResource CardStyle}">
                                         <StackPanel Spacing="12">
                                             <StackPanel Spacing="4"><TextBlock Text="Maintenance" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="Keep the application and model information current." Style="{StaticResource CaptionStyle}" /></StackPanel>
-                                            <CheckBox x:Name="AutoUpdatesBox" Content="Check for application updates" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />
+                                            <CheckBox x:Name="AutoUpdatesBox" Content="Check for NInferEZ updates" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />
                                             <CheckBox x:Name="AutoCatalogBox" Content="Check the model catalog" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />
-                                            <CheckBox x:Name="AutoEnginesBox" Content="Check the engine catalog" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />
+                                            <CheckBox x:Name="AutoEnginesBox" Visibility="Collapsed" Content="Engine versions are included in Manager updates" Checked="ApplicationPreference_Changed" Unchecked="ApplicationPreference_Changed" />
                                         </StackPanel>
                                     </Border>
 
@@ -666,6 +678,20 @@
                                     </Expander>
                                 </StackPanel>
                             </Grid>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel Spacing="12">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Updates" Style="{StaticResource SectionTitleStyle}" />
+                                        <TextBlock Text="Update the Manager and its engine together." Style="{StaticResource CaptionStyle}" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="SettingsInstalledVersionText" Style="{StaticResource CaptionStyle}" />
+                                    </StackPanel>
+                                    <Button x:Name="SettingsCheckUpdatesButton" Content="Check for updates" Click="CheckUpdate_Click" HorizontalAlignment="Left" IsEnabled="False" />
+                                    <StackPanel x:Name="SettingsAvailableUpdatePanel" Spacing="8" Visibility="Collapsed">
+                                        <TextBlock x:Name="SettingsAvailableUpdateText" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <Button x:Name="SettingsInstallUpdateButton" Content="Download and install" Click="InstallApplicationUpdate_Click" Style="{StaticResource ManagerPrimaryButtonStyle}" HorizontalAlignment="Left" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

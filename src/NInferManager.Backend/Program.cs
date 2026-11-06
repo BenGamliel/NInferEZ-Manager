@@ -26,6 +26,7 @@ builder.Services.AddSingleton<EnginePackageService>();
 builder.Services.AddSingleton<EngineController>();
 builder.Services.AddSingleton<PublicApiProxy>();
 builder.Services.AddSingleton<UpdateService>();
+builder.Services.AddSingleton<ProductUpdateCoordinator>();
 builder.Services.AddSingleton<IConverterRunner,ConverterRunner>();
 builder.Services.AddSingleton<ConversionService>();
 builder.Services.AddHostedService(provider=>provider.GetRequiredService<ConversionService>());
@@ -88,6 +89,9 @@ app.Services.GetRequiredService<EnginePackageService>().CommitInstallation=async
     try{token.ThrowIfCancellationRequested();await installCoordinator.UnloadAsync("switching verified engine package");commit();}
     finally{installCoordinator.LifecycleGate.Release();}
 };
+var productUpdates=app.Services.GetRequiredService<ProductUpdateCoordinator>();
+installCoordinator.ProductUpdateBlocker=productUpdates.LoadBlocker;
+productUpdates.Start();
 await proxy.StartAsync();
 var appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown";
 
@@ -95,10 +99,11 @@ app.MapGet("/control/v1/health", () => new { status = "ok", product="NInferEZ Ma
 app.MapGet("/control/v1/status", async (EngineController engine) =>
 {
     var active = engine.ActiveModel;
+    var session = engine.Session;
     return new ManagerStatus(engine.State, $"http://127.0.0.1:{proxy.Port}/v1", proxy.Port,
         proxy.ChangedAutomatically, proxy.PortConflict, active is null?null:app.Services.GetRequiredService<SettingsService>().ModelIdFor(active), active?.DisplayName, proxy.ActiveRequests,
-        await GpuMonitor.ReadAsync(engine.Session?.Profile.Device??0), DateTimeOffset.Now)
-        {LoadedModelId=engine.Session?.ModelId,LoadedContext=engine.Session?.Profile.MaxContext,LoadedBackendPort=engine.Session?.Port,LoadedEngineArchitecture=engine.Session?.Architecture,LoadedEngineVersion=engine.Session?.EngineVersion,ApiEnabled=proxy.IsEnabled};
+        await GpuMonitor.ReadAsync(session?.Profile.Device??0), DateTimeOffset.Now)
+        {LoadedModelId=session?.ModelId,LoadedModelFile=session?.Model.FileName,LoadedContext=session?.Profile.MaxContext,LoadedBackendPort=session?.Port,LoadedEngineArchitecture=session?.Architecture,LoadedEngineVersion=session?.EngineVersion,ApiEnabled=proxy.IsEnabled,LastContextFit=engine.LastContextFit};
 });
 app.MapGet("/control/v1/settings", (SettingsService store) => store.Snapshot());
 app.MapGet("/control/v1/converter/capabilities", (ConversionService converter,CancellationToken token)=>converter.CapabilitiesAsync(token));
@@ -233,12 +238,13 @@ app.MapPut("/control/v1/models/{file}/alias", async (string file, ModelAliasRequ
     });
     return Results.Ok(new ApiResult(true,$"API clients can now select this model as '{effective}'."));
 });
-app.MapPost("/control/v1/models/{file}/download", (string file, ModelCatalog catalog, ModelDownloadService downloads) =>
+app.MapPost("/control/v1/models/{file}/download", (string file, ModelCatalog catalog, ModelDownloadService downloads, EnginePackageService packages) =>
 {
     var entry = catalog.Find(file);
     if (entry is null) return Results.NotFound(new ApiResult(false, "Model is not in the catalog."));
     if (catalog.IsInstalled(entry)) return Results.Ok(new ApiResult(true, "This model variant is already available locally. No download is needed."));
     if (!entry.DownloadAvailable) return Results.BadRequest(new ApiResult(false, "This model is supplied with the full installer or can be imported from an existing NInfer artifact."));
+    ModelVersionPolicy.Require(entry,ModelVersionPolicy.ReadEngineVersion(packages.ActiveDirectory),includeEngine:true);
     downloads.Start(entry);
     return Results.Accepted(value: new ApiResult(true, "Download started."));
 });
@@ -299,6 +305,7 @@ app.MapPost("/control/v1/engines/refresh", async (EnginePackageService packages,
 app.MapPost("/control/v1/engines/{version}/{architecture}/install", (string version, string architecture, EnginePackageService packages, EngineController engine) =>
 {
     if (engine.State is EngineState.Loading or EngineState.Ready or EngineState.Unloading) return Results.Conflict(new ApiResult(false, "Unload the model before changing the engine package."));
+    ReleaseEnginePolicy.RequireSelectedPin(version,architecture);
     packages.StartInstall(version, architecture); return Results.Accepted(value: new ApiResult(true, "Engine download started."));
 });
 app.MapPost("/control/v1/engines/install/cancel", (EnginePackageService packages) => { packages.CancelInstall(); return Results.Accepted(value: new ApiResult(true, "Engine download cancellation requested.")); });
@@ -306,6 +313,7 @@ app.MapGet("/control/v1/engines/progress", (EnginePackageService packages) => pa
 app.MapPost("/control/v1/engines/{version}/{architecture}/activate", (string version, string architecture, EnginePackageService packages, EngineController engine) =>
 {
     if (engine.State is EngineState.Loading or EngineState.Ready or EngineState.Unloading) return Results.Conflict(new ApiResult(false, "Unload the model before changing the engine package."));
+    ReleaseEnginePolicy.RequireSelectedPin(version,architecture);
     packages.Activate(version, architecture); return Results.Ok(new ApiResult(true, $"NInferEZ Engine {version} ({architecture}) is active."));
 });
 app.MapGet("/control/v1/command", (EngineController engine) => Results.Text(engine.BuildCommandPreview(), "text/plain"));
@@ -315,7 +323,16 @@ app.MapPost("/control/v1/diagnostics", (AppPaths paths, SettingsService store, M
     new ApiResult(true, SystemOperations.CreateDiagnostics(paths, store, log)));
 app.MapPost("/control/v1/trim", () => { SystemOperations.TrimWorkingSet(); return new ApiResult(true, "Working set trimmed."); });
 
+app.MapGet("/control/v1/update/completion", (ProductUpdateCoordinator updates) => updates.State);
+app.MapPost("/control/v1/update/complete", (ProductUpdateCoordinator updates) => { updates.Start(); return Results.Accepted(value: new ApiResult(true,"Completing the NInferEZ update.")); });
+
 app.MapGet("/control/v1/update", (UpdateService updates, CancellationToken token) => updates.CheckAsync(token));
+app.MapPost("/control/v1/update/dismiss", (DismissUpdateRequest value, SettingsService store) =>
+{
+    if(!Version.TryParse(value.Version,out _))return Results.BadRequest(new ApiResult(false,"The release version is invalid."));
+    store.Update(settings=>settings.DismissedUpdateVersion=value.Version);
+    return Results.Ok(new ApiResult(true,"Update notification dismissed."));
+});
 app.MapPost("/control/v1/update/download", (UpdateInfo value, UpdateService updates) =>
 {
     updates.StartDownload(value);
@@ -355,13 +372,6 @@ app.MapPost("/control/v1/open", (string target, AppPaths paths, ManagerLog log) 
 });
 
 app.Lifetime.ApplicationStopping.Register(() => proxy.DisposeAsync().AsTask().GetAwaiter().GetResult());
-var startupEngines = app.Services.GetRequiredService<EnginePackageService>();
-if (startupEngines.ShouldRefresh())
-    _ = Task.Run(async () =>
-    {
-        try { await startupEngines.RefreshAsync(); }
-        catch (Exception ex) { app.Services.GetRequiredService<ManagerLog>().Write("Automatic engine catalog refresh failed", ex); }
-    });
 await app.RunAsync();
 
 public sealed record PortChangeRequest(int Port, bool Locked, bool AllowLocalNetwork, bool Save,string? ApiKey=null,bool? CorsEnabled=null,long? ExpectedRevision=null);
@@ -369,4 +379,5 @@ public sealed record ImportModelRequest(string Path);
 public sealed record LinkModelRequest(string Path);
 public sealed record ModelAliasRequest(string? Alias);
 public sealed record ApplyUpdateRequest(int UiProcessId);
+public sealed record DismissUpdateRequest(string Version);
 public sealed record ApiStateRequest(bool Enabled);

@@ -14,7 +14,7 @@ public sealed class EnginePackageService : IDisposable
     private readonly AppPaths _paths;
     private readonly ManagerLog _log;
     private readonly SettingsService _settings;
-    private readonly HttpClient _client = new(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = Timeout.InfiniteTimeSpan };
+    private readonly HttpClient _client;
     private readonly SemaphoreSlim _installGate = new(1, 1);
     private EngineChannel _channel = BuiltInChannel();
     private CancellationTokenSource? _downloadCancellation;
@@ -23,13 +23,16 @@ public sealed class EnginePackageService : IDisposable
     public Func<Action,CancellationToken,Task>? CommitInstallation { get; set; }
     public EnginePackageProgress Current { get; private set; } = new("Idle", null, 0, 0, false);
 
-    public EnginePackageService(AppPaths paths, ManagerLog log, SettingsService settings)
+    public EnginePackageService(AppPaths paths, ManagerLog log, SettingsService settings, HttpClient? client = null)
     {
         _paths = paths;
+        _client = client ?? new(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = Timeout.InfiniteTimeSpan };
         _log = log;
         _settings = settings;
         _client.DefaultRequestHeaders.UserAgent.ParseAdd($"NInferEZ-Manager/{ProductInfo.Version}");
         LoadCachedChannel();
+        var release = ReleaseEnginePolicy.Embedded();
+        if(release.Approved)_channel = _channel with{Packages=release.Packages.Select(FromReleasePackage).ToArray()};
     }
 
     public string ActiveDirectory
@@ -64,26 +67,16 @@ public sealed class EnginePackageService : IDisposable
         return new(gpu?.Name, recommended, pointer?.CudaArchitecture ?? ReadBundledArchitecture(), pointer?.EngineVersion ?? ReadBundledVersion(), packages, _channel.UpdatedAt);
     }
 
-    public async Task RefreshAsync(CancellationToken token = default)
+    public Task RefreshAsync(CancellationToken token = default)
     {
-        await _refreshGate.WaitAsync(token);
-        try
-        {
-        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(25));
-        using var response = await _client.GetAsync(ProductInfo.EngineChannelUrl,HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-        response.EnsureSuccessStatusCode();
-        var json = await BoundedHttpContent.ReadTextAsync(response.Content,timeout.Token);
-        var channel = ParseAndValidateChannel(json);
-        var temporary = _paths.EngineCatalogCacheFile + ".tmp";
-        await File.WriteAllTextAsync(temporary, json, token);
-        File.Move(temporary, _paths.EngineCatalogCacheFile, true);
-        _channel = channel;
-        _settings.Update(s=>s.LastEngineCheckUtc=DateTimeOffset.UtcNow);
-        _log.Write($"Engine channel refreshed with {channel.Packages.Count} compatible package(s).");
-        }
-        finally{_refreshGate.Release();}
+        token.ThrowIfCancellationRequested();
+        // Engine versions are pinned by the Manager package. A mutable remote channel
+        // cannot offer a different engine independently of the product update.
+        var release=ReleaseEnginePolicy.Embedded();
+        if(release.Approved)_channel=_channel with{Packages=release.Packages.Select(FromReleasePackage).ToArray()};
+        return Task.CompletedTask;
     }
-    public bool ShouldRefresh() => _settings.Current.AutoCheckEngines && (_settings.Current.LastEngineCheckUtc is null || DateTimeOffset.UtcNow - _settings.Current.LastEngineCheckUtc >= TimeSpan.FromHours(Math.Max(1, _settings.Current.EngineCheckHours)));
+    public bool ShouldRefresh() => false;
 
     public void StartInstall(string version, string architecture)
     {
@@ -106,14 +99,18 @@ public sealed class EnginePackageService : IDisposable
         _log.Write($"Activated NInferEZ Engine {package.EngineVersion} ({package.CudaArchitecture}).");
     }
 
-    private async Task InstallAsync(EnginePackage package, CancellationToken token)
+    private async Task InstallAsync(EnginePackage package, CancellationToken token, bool throwOnFailure = false)
     {
         await _installGate.WaitAsync(token);
-        var downloads = Path.Combine(_paths.DataDirectory, "cache", "engine-downloads");
-        Directory.CreateDirectory(downloads);
-        var partial = Path.Combine(downloads, package.FileName + ".partial");
+        string? partial = null;
+        PreparedEngine? prepared = null;
         try
         {
+            var downloads = Path.Combine(_paths.DataDirectory, "cache", "engine-downloads");
+            Directory.CreateDirectory(downloads);
+            partial = Path.Combine(downloads, package.FileName + ".partial");
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+            deadline.CancelAfter(TimeSpan.FromMinutes(30)); token = deadline.Token;
             using var response = await _client.GetAsync(package.Url, HttpCompletionOption.ResponseHeadersRead, token);
             response.EnsureSuccessStatusCode();
             var reported = response.Content.Headers.ContentLength;
@@ -125,7 +122,7 @@ public sealed class EnginePackageService : IDisposable
                 while (true)
                 {
                     var read = await input.ReadAsync(buffer, token); if (read == 0) break;
-                    completed += read; if (completed > MaximumArchiveBytes) throw new InvalidDataException("The engine package exceeded the download safety limit.");
+                    completed += read; if (completed > package.SizeBytes || completed > MaximumArchiveBytes) throw new InvalidDataException("The engine package exceeded the download safety limit.");
                     await output.WriteAsync(buffer.AsMemory(0, read), token);
                     Current = new("Downloading", package.FileName, completed, package.SizeBytes, true);
                 }
@@ -138,24 +135,49 @@ public sealed class EnginePackageService : IDisposable
                 if (!hash.Equals(package.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The engine package failed SHA-256 verification.");
             }
             Current = new("Installing", package.FileName, package.SizeBytes, package.SizeBytes, true);
-            if(CommitInstallation is not null)await CommitInstallation(()=>{token.ThrowIfCancellationRequested();InstallArchive(partial,package);Activate(package.EngineVersion,package.CudaArchitecture);},token);
-            else{InstallArchive(partial,package);Activate(package.EngineVersion,package.CudaArchitecture);}
-            File.Delete(partial);
+            // Hash, extract and validate while the previous runtime can still serve requests.
+            prepared = PrepareArchive(partial,package);
+            void Commit() { token.ThrowIfCancellationRequested(); CommitArchive(prepared,package); }
+            if(CommitInstallation is not null)await CommitInstallation(Commit,token); else Commit();
             Current = new("Ready", package.FileName, package.SizeBytes, package.SizeBytes, false);
         }
         catch (OperationCanceledException)
         {
             Current = new("Cancelled", package.FileName, 0, package.SizeBytes, false);
+            if(throwOnFailure)throw;
         }
         catch (Exception ex)
         {
             _log.Write("Engine package installation failed", ex);
             Current = new("Failed", package.FileName, 0, package.SizeBytes, false, ex.Message);
+            if(throwOnFailure)throw;
         }
-        finally { try{if(File.Exists(partial))File.Delete(partial);}catch(IOException){} _installGate.Release(); }
+        finally
+        {
+            try
+            {
+                if (partial is not null) CleanupInstallation(() => File.Delete(partial), partial);
+                if (prepared is not null) CleanupInstallation(() => { if (Directory.Exists(prepared.Staging)) Directory.Delete(prepared.Staging, true); }, prepared.Staging);
+            }
+            finally { _installGate.Release(); }
+        }
     }
 
-    private void InstallArchive(string archivePath, EnginePackage package)
+    private void CleanupInstallation(Action cleanup, string path)
+    {
+        try { cleanup(); }
+        catch (Exception error)
+        {
+            // Cleanup is best-effort. Preserve the installation result and retained files
+            // for recovery, even when cleanup or its diagnostic logging fails.
+            try { _log.Write($"Engine package cleanup could not remove {path}; retained for recovery", error); }
+            catch (Exception) { }
+        }
+    }
+
+    private static string HashFile(string path) { using var stream=File.OpenRead(path);return Convert.ToHexString(SHA256.HashData(stream)); }
+    private sealed record PreparedEngine(string Staging, string Source);
+    private PreparedEngine PrepareArchive(string archivePath, EnginePackage package)
     {
         var staging = Path.Combine(_paths.EnginesDirectory, ".staging-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -163,13 +185,19 @@ public sealed class EnginePackageService : IDisposable
         {
             var rootPrefix = Path.GetFullPath(staging) + Path.DirectorySeparatorChar;
             long expanded = 0;
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var zip = ZipFile.OpenRead(archivePath))
             {
                 if (zip.Entries.Count is 0 or > 20000) throw new InvalidDataException("The engine archive entry count is invalid.");
                 foreach (var entry in zip.Entries)
                 {
                     expanded += entry.Length; if (expanded > MaximumExpandedBytes) throw new InvalidDataException("The expanded engine package exceeds the safety limit.");
-                    var destination = Path.GetFullPath(Path.Combine(staging, entry.FullName));
+                    var name = entry.FullName.Replace('\\','/');
+                    var parts = name.Split('/',StringSplitOptions.RemoveEmptyEntries);
+                    if(name.StartsWith('/') || name.Contains(':') || parts.Any(p=>p is "." or ".." || p.EndsWith(' ') || p.EndsWith('.')) || (entry.ExternalAttributes >> 16 & 0xF000)==0xA000)
+                        throw new InvalidDataException("The engine archive contains an unsafe path or symbolic link.");
+                    var destination = Path.GetFullPath(Path.Combine(staging, name));
+                    if(!names.Add(destination))throw new InvalidDataException("The engine archive contains duplicate paths.");
                     if (!destination.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The engine archive contains an unsafe path.");
                     if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\')) { Directory.CreateDirectory(destination); continue; }
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!); entry.ExtractToFile(destination, true);
@@ -185,16 +213,34 @@ public sealed class EnginePackageService : IDisposable
             var source = Path.GetDirectoryName(manifests[0])!;
             if (!File.Exists(Path.Combine(source, "ninfer-serve.exe"))) throw new InvalidDataException("ninfer-serve.exe is missing from the engine package.");
             if (!File.Exists(Path.Combine(source,"ninfer-inspect.exe")))throw new InvalidDataException("ninfer-inspect.exe is missing from the engine package.");
-            var destinationRoot = Path.GetFullPath(Path.Combine(_paths.EnginesDirectory, RelativeRoot(package)));
-            if(!IsUnder(destinationRoot,_paths.EnginesDirectory))throw new InvalidDataException("The engine installation destination is unsafe.");
-            var previous = destinationRoot + ".previous";
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationRoot)!);
-            if (Directory.Exists(previous)) Directory.Delete(previous, true);
-            if (Directory.Exists(destinationRoot)) Directory.Move(destinationRoot, previous);
-            try { Directory.Move(source, destinationRoot); }
-            catch { if (Directory.Exists(destinationRoot)) Directory.Delete(destinationRoot, true); if (Directory.Exists(previous)) Directory.Move(previous, destinationRoot); throw; }
+            var files = Directory.EnumerateFiles(source,"*",SearchOption.AllDirectories).ToDictionary(
+                f=>Path.GetRelativePath(source,f), f=>HashFile(f),StringComparer.OrdinalIgnoreCase);
+            File.WriteAllText(Path.Combine(source,".manager-package.json"),JsonSerializer.Serialize(new PackageReceipt(1,package.Sha256,package.SizeBytes,files),JsonOptions()));
+            return new PreparedEngine(staging,source);
         }
-        finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+        catch { CleanupInstallation(() => { if(Directory.Exists(staging))Directory.Delete(staging,true); }, staging); throw; }
+    }
+    private void CommitArchive(PreparedEngine prepared, EnginePackage package)
+    {
+        var destinationRoot = Path.GetFullPath(Path.Combine(_paths.EnginesDirectory, RelativeRoot(package)));
+        if(!IsUnder(destinationRoot,_paths.EnginesDirectory))throw new InvalidDataException("The engine installation destination is unsafe.");
+        var previous = destinationRoot + ".previous";
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationRoot)!);
+        if(Directory.Exists(previous))throw new IOException("An earlier engine replacement needs recovery; its files were preserved.");
+        var hadOriginal = Directory.Exists(destinationRoot);
+        if(hadOriginal)Directory.Move(destinationRoot,previous);
+        try
+        {
+            Directory.Move(prepared.Source,destinationRoot);
+            WritePointer(new CurrentEnginePointer(1,package.EngineVersion,package.CudaArchitecture,RelativeRoot(package)));
+        }
+        catch
+        {
+            if(Directory.Exists(destinationRoot))Directory.Delete(destinationRoot,true);
+            if(hadOriginal && Directory.Exists(previous))Directory.Move(previous,destinationRoot);
+            throw;
+        }
+        // Keep a replaced same-version copy for recovery. Other version directories are untouched.
     }
 
     private void LoadCachedChannel()
@@ -211,9 +257,24 @@ public sealed class EnginePackageService : IDisposable
         if(channel.Packages.Select(p=>$"{p.EngineVersion}/{p.CudaArchitecture}").Distinct(StringComparer.OrdinalIgnoreCase).Count()!=channel.Packages.Count)throw new InvalidDataException("The engine channel contains duplicate package identifiers.");
         return channel with { Packages = channel.Packages.Where(IsSupportedPackage).ToArray() };
     }
+    public static void ValidateReleasePackage(ReleaseEnginePackage package) => Validate(FromReleasePackage(package));
+    private static EnginePackage FromReleasePackage(ReleaseEnginePackage p) => new(p.EngineVersion,p.ContractVersion,p.Platform,p.CudaArchitecture,p.GpuFamily,p.GpuModels,p.NativeNvfp4,p.Channel,p.Qualification,p.FileName,p.SizeBytes,p.Sha256,p.Url);
+    public async Task InstallReleasePackageAsync(ReleaseEnginePackage release, CancellationToken token)
+    {
+        var package = FromReleasePackage(release); Validate(package);
+        if(IsInstalled(package))
+        {
+            var pointer=ReadPointer();
+            if(pointer?.EngineVersion==package.EngineVersion && pointer.CudaArchitecture==package.CudaArchitecture)return;
+            void ActivatePin() => WritePointer(new CurrentEnginePointer(1, package.EngineVersion, package.CudaArchitecture, RelativeRoot(package)));
+            if(CommitInstallation is not null) await CommitInstallation(ActivatePin,token); else ActivatePin();
+            return;
+        }
+        await InstallAsync(package,token,throwOnFailure:true);
+    }
     private static void Validate(EnginePackage p)
     {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(p.EngineVersion,@"^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$")||p.EngineVersion.Length>80||p.CudaArchitecture is not ("sm86" or "sm89" or "sm120a")
+        if (p is null || string.IsNullOrWhiteSpace(p.EngineVersion) || string.IsNullOrWhiteSpace(p.Sha256) || string.IsNullOrWhiteSpace(p.FileName) || string.IsNullOrWhiteSpace(p.Url) || !System.Text.RegularExpressions.Regex.IsMatch(p.EngineVersion,@"^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$")||p.EngineVersion.Length>80||p.CudaArchitecture is not ("sm86" or "sm89" or "sm120a")
             || p.ContractVersion is < ProductInfo.MinimumEngineContract or > ProductInfo.MaximumEngineContract || p.Platform != "windows-x64"
             || p.SizeBytes is <= 0 or > MaximumArchiveBytes || p.Sha256.Length != 64 || !p.Sha256.All(Uri.IsHexDigit)
             || Path.GetFileName(p.FileName) != p.FileName || !Uri.TryCreate(p.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https"
@@ -229,7 +290,20 @@ public sealed class EnginePackageService : IDisposable
             var root=Path.Combine(_paths.EnginesDirectory,RelativeRoot(p));
             if(!File.Exists(Path.Combine(root,"ninfer-serve.exe"))||!File.Exists(Path.Combine(root,"ninfer-inspect.exe")))return false;
             var manifest=JsonSerializer.Deserialize<InstalledManifest>(File.ReadAllText(Path.Combine(root,"engine-manifest.json")),JsonOptions());
-            return manifest is not null&&manifest.Product=="NInferEZ Engine"&&manifest.ContractVersion is >=ProductInfo.MinimumEngineContract and <=ProductInfo.MaximumEngineContract&&manifest.EngineVersion==p.EngineVersion&&manifest.CudaArchitecture==p.CudaArchitecture;
+            if(manifest is null || manifest.Product!="NInferEZ Engine" || manifest.ContractVersion is <ProductInfo.MinimumEngineContract or >ProductInfo.MaximumEngineContract || manifest.EngineVersion!=p.EngineVersion || manifest.CudaArchitecture!=p.CudaArchitecture)return false;
+            var receiptPath=Path.Combine(root,".manager-package.json");
+            if(!File.Exists(receiptPath) || new FileInfo(receiptPath).Length>4*1024*1024)return false;
+            var receipt=JsonSerializer.Deserialize<PackageReceipt>(File.ReadAllText(receiptPath),JsonOptions());
+            if(receipt is null || receipt.SchemaVersion!=1 || !receipt.ArchiveSha256.Equals(p.Sha256,StringComparison.OrdinalIgnoreCase) || receipt.ArchiveBytes!=p.SizeBytes || receipt.Files is null || receipt.Files.Count is <3 or >20000)return false;
+            if(!receipt.Files.ContainsKey("ninfer-serve.exe") || !receipt.Files.ContainsKey("ninfer-inspect.exe") || !receipt.Files.ContainsKey("engine-manifest.json"))return false;
+            foreach(var pair in receipt.Files)
+            {
+                var file=Path.GetFullPath(Path.Combine(root,pair.Key));
+                if(!IsUnder(file,root) || !File.Exists(file) || pair.Value.Length!=64)return false;
+                using var stream=File.OpenRead(file);
+                if(!Convert.ToHexString(SHA256.HashData(stream)).Equals(pair.Value,StringComparison.OrdinalIgnoreCase))return false;
+            }
+            return true;
         }
         catch{return false;}
     }
@@ -283,5 +357,6 @@ public sealed class EnginePackageService : IDisposable
     {
         [JsonIgnore] public string? StorageRoot{get;init;}
     }
+    private sealed record PackageReceipt(int SchemaVersion,string ArchiveSha256,long ArchiveBytes,Dictionary<string,string> Files);
     private sealed record InstalledManifest(string Product, int ContractVersion, string EngineVersion, string CudaArchitecture);
 }

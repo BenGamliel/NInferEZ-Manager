@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ManagerBackendAssembly Condition="'$(ManagerBackendAssembly)'==''">..\..\src\NInferManager.Backend\bin\Release\net10.0-windows10.0.19041.0\win-x64\NInferManager.Backend.dll</ManagerBackendAssembly>
+    <ManagerContractsAssembly Condition="'$(ManagerContractsAssembly)'==''">..\..\src\NInferManager.Contracts\bin\Release\net9.0\NInferManager.Contracts.dll</ManagerContractsAssembly>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Reference Include="NInferManager.Backend"><HintPath>$(ManagerBackendAssembly)</HintPath><Private>true</Private></Reference>
+    <Reference Include="NInferManager.Contracts"><HintPath>$(ManagerContractsAssembly)</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+</Project>

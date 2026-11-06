@@ -28,6 +28,27 @@ File.WriteAllText(Path.Combine(data, "settings.json"), JsonSerializer.Serialize(
 File.WriteAllBytes(Path.Combine(models, "fixture.ninfer"), [0, 1, 2, 3]);
 File.WriteAllBytes(Path.Combine(models, "bad-preset.ninfer"), [3, 2, 1, 0]);
 File.WriteAllText(Path.Combine(models, "bad-preset.ninferez.json"), "{\"invalid\":\"preset\"}");
+var releaseBinding=ReleaseEnginePolicy.Embedded();
+string? fixtureEngineManifest=null;
+string? originalFixtureEngineManifest=null;
+if(releaseBinding.Approved)
+{
+    var architecture=EnginePackageService.RecommendArchitecture((await GpuMonitor.ReadAsync())?.Name)
+        ?? throw new Exception("Approved live-control fixture requires supported NVIDIA GPU telemetry; no GPU inference is performed.");
+    var pin=ReleaseEnginePolicy.Select(releaseBinding,architecture);
+    var engines=Path.Combine(data,"engines");
+    var engine=Path.Combine(engines,pin.EngineVersion,pin.CudaArchitecture);Directory.CreateDirectory(engine);
+    File.WriteAllBytes(Path.Combine(engine,"ninfer-serve.exe"),[0]);
+    var fakeInspector=Directory.EnumerateFiles(Path.Combine(sourceRoot,"tests","NInferManager.FakeEngine","bin"),"NInferManager.FakeEngine.exe",SearchOption.AllDirectories).OrderByDescending(File.GetLastWriteTimeUtc).First();
+    foreach(var file in Directory.EnumerateFiles(Path.GetDirectoryName(fakeInspector)!))File.Copy(file,Path.Combine(engine,Path.GetFileName(file)),true);
+    File.Copy(fakeInspector,Path.Combine(engine,"ninfer-inspect.exe"));
+    fixtureEngineManifest=Path.Combine(engine,"engine-manifest.json");
+    originalFixtureEngineManifest=JsonSerializer.Serialize(new{product="NInferEZ Engine",contractVersion=pin.ContractVersion,engineVersion=pin.EngineVersion,cudaArchitecture=pin.CudaArchitecture},SettingsService.JsonOptions);
+    File.WriteAllText(fixtureEngineManifest,originalFixtureEngineManifest);
+    var files=Directory.EnumerateFiles(engine).ToDictionary(file=>Path.GetFileName(file)!,file=>Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))));
+    File.WriteAllText(Path.Combine(engine,".manager-package.json"),JsonSerializer.Serialize(new{schemaVersion=1,archiveSha256=pin.Sha256,archiveBytes=pin.SizeBytes,files},SettingsService.JsonOptions));
+    File.WriteAllText(Path.Combine(engines,"current.json"),JsonSerializer.Serialize(new{schemaVersion=1,engineVersion=pin.EngineVersion,cudaArchitecture=pin.CudaArchitecture,relativePath=Path.Combine(pin.EngineVersion,pin.CudaArchitecture)},SettingsService.JsonOptions));
+}
 var backendPath = args.FirstOrDefault(x => !x.StartsWith('-')) ?? Directory.EnumerateFiles(Path.Combine(sourceRoot, "src", "NInferManager.Backend", "bin"), "NInferManager.Backend.exe", SearchOption.AllDirectories)
     .OrderByDescending(File.GetLastWriteTimeUtc).First();
 var start = new ProcessStartInfo(backendPath) { UseShellExecute = false, CreateNoWindow = true,
@@ -43,17 +64,18 @@ start.Environment["NINFEREZ_MANAGER_PARENT_PID"] = fixtureParent.Id.ToString();
 start.Environment["NINFEREZ_MANAGER_DATA_ROOT"] = data;
 start.Environment["NINFEREZ_MANAGER_MODELS_ROOT"] = models;
 start.Environment["NINFEREZ_MANAGER_ENGINE_ROOT"] = Path.Combine(fixtureRoot, "Engine");
+if(args.Contains("--packaged-converter"))start.Environment["CUDA_VISIBLE_DEVICES"]="-1";
 using var process = Process.Start(start) ?? throw new Exception("Backend fixture did not start.");
 var errors = process.StandardError.ReadToEndAsync();
 var stdout = process.StandardOutput.ReadToEndAsync();
 using var job = new ProcessJob(); job.Assign(process);
 job.Assign(fixtureParent);
 using var control = new HttpClient(new SocketsHttpHandler { UseProxy = false })
-    { BaseAddress = new Uri($"http://127.0.0.1:{controlPort}"), Timeout = TimeSpan.FromSeconds(15) };
+    { BaseAddress = new Uri($"http://127.0.0.1:{controlPort}"), Timeout = args.Contains("--packaged-converter")?TimeSpan.FromMinutes(2):TimeSpan.FromSeconds(15) };
 control.DefaultRequestHeaders.Add(ControlAuthentication.Header, token);
 using var anonymous = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { BaseAddress = control.BaseAddress, Timeout = control.Timeout };
 using var api = new HttpClient(new SocketsHttpHandler { UseProxy = false })
-    { BaseAddress = new Uri($"http://127.0.0.1:{publicPort}"), Timeout = TimeSpan.FromSeconds(15) };
+    { BaseAddress = new Uri($"http://127.0.0.1:{publicPort}"), Timeout = args.Contains("--packaged-converter")?TimeSpan.FromMinutes(2):TimeSpan.FromSeconds(15) };
 var passed = 0;
 try
 {
@@ -65,9 +87,39 @@ try
         Check(!string.IsNullOrEmpty(health.RootElement.GetProperty("instanceId").GetString()), "session instance identity");
     }
     await Expect(anonymous, HttpMethod.Get, "/control/v1/health", null, 401, "control health requires session token");
+    if(releaseBinding.Approved)
+    {
+        var completionReady=false;
+        for(var attempt=0;attempt<100;attempt++)
+        {
+            using var completion=await Json(control,"/control/v1/update/completion");
+            if(completion.RootElement.GetProperty("ready").GetBoolean()){completionReady=true;break;}
+            if(completion.RootElement.GetProperty("stage").GetString()=="Failed")throw new Exception(completion.RootElement.GetProperty("error").GetString());
+            await Task.Delay(100);
+        }
+        Check(completionReady,"approved Manager completes its pinned-engine setup using only CPU fixture files");
+    }
+    else
+    {
+        using var completion=await Json(control,"/control/v1/update/completion");
+        Check(completion.RootElement.GetProperty("stage").GetString()=="Awaiting approval","unapproved local Manager remains unbound");
+    }
+    await Expect(control,HttpMethod.Post,"/control/v1/engines/0.0.0/sm120a/install",null,409,"engine versions outside the approved Manager release cannot be installed independently");
+    try
+    {
+        if(fixtureEngineManifest is not null)File.WriteAllText(fixtureEngineManifest,"{\"engineVersion\":\"1.0.0\"}");
+        await Expect(control,HttpMethod.Post,"/control/v1/models/OmniEdu-27B-Q6_K-Vision-DFlash2.ninfer/download",null,409,"Omni download requires the actual selected engine to reach 1.1.0");
+    }
+    finally { if(fixtureEngineManifest is not null)File.WriteAllText(fixtureEngineManifest,originalFixtureEngineManifest); }
     await Expect(anonymous,HttpMethod.Get,"/control/v1/converter/status",null,401,"converter control is private and authenticated");
     using(var conversion=await Json(control,"/control/v1/converter/status"))
         Check(!conversion.RootElement.GetProperty("running").GetBoolean(),"converter API starts idle without runtime or GPU loading");
+    if(args.Contains("--packaged-converter"))
+    {
+        using var capabilities=await Json(control,"/control/v1/converter/capabilities");
+        Check(capabilities.RootElement.GetProperty("version").GetString()=="1.0.0","packaged Manager extracts and invokes the unchanged stable Converter 1.0.0");
+        Check(capabilities.RootElement.GetProperty("formats").GetArrayLength()>0,"stable Converter reports actual supported formats through the packaged Manager API");
+    }
     await Expect(control,HttpMethod.Post,"/control/v1/converter/check","""{"source":"","output":"missing.ninfer"}""",400,"converter invalid input has actionable400");
     await Expect(control,HttpMethod.Post,"/control/v1/converter/cancel","{}",409,"converter cancel reports no active job rather than an internal error");
     anonymous.DefaultRequestHeaders.Add(ControlAuthentication.Header, new string('0', 64));

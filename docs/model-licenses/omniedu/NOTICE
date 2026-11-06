@@ -1,0 +1,15 @@
+OmniEdu-27B NInfer conversion by 2beng2.
+Original OmniEdu authors: Hao Liang, Qihan Lin, Meiyi Qiang, Linzhuang Sun,
+Hengyi Feng, Mingrui Chen, Sizhe Qiu, Wentao Zhang.
+Sources and pinned revisions are recorded in model-manifest.json.
+The upstream OmniEdu and GGUF model cards declare license: other; that
+designation is retained here. Their original license and usage terms apply.
+The upstream project publishes Apache-2.0 in its GitHub repository; a copy
+is included as LICENSE-UPSTREAM-PROJECT. This conversion does not replace
+the upstream model terms with a new license or assert a different scope.
+The Qwen backbone and Inco AI DFlash2 draft declare Apache-2.0.
+Original model cards and the Qwen license are included for attribution.
+Changes: repackaging preserved GGUF Q6 text blocks into NInfer, matching
+BF16 vision, native Q8 draft, indexed original Q6 proposal-head rows, and
+normalizing text-layer metadata to the 64 actual layers in the source.
+No additional text-matrix quantization; target tokenizer/template retained.

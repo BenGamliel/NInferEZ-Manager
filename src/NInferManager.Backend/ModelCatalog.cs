@@ -7,6 +7,20 @@ namespace NInferManager.Backend;
 public sealed class ModelCatalogEntry
 {
     public string DisplayName { get; set; } = "";
+    public string MinimumManagerVersion { get; set; } = "";
+    public bool? RecommendedAutoContext { get; set; }
+    public string MinimumEngineVersion { get; set; } = "";
+    public string RecommendedVisionResidency { get; set; } = "resident";
+    public int? RecommendedCudaGraphAllowanceMiB { get; set; }
+    public int RecommendedDeviceStateSlots { get; set; }
+    public bool RecommendedThinkingEnabled { get; set; } = true;
+    public bool RecommendedPreserveThinking { get; set; } = true;
+    public double? RecommendedTemperature { get; set; }
+    public double? RecommendedTopP { get; set; }
+    public int? RecommendedTopK { get; set; }
+    public double? RecommendedMinP { get; set; }
+    public double? RecommendedPresencePenalty { get; set; }
+    public double? RecommendedFrequencyPenalty { get; set; }
     public string Repository { get; set; } = "";
     public string Revision { get; set; } = "main";
     public string FileName { get; set; } = "";
@@ -66,8 +80,14 @@ public sealed class ModelCatalogEntry
     public ModelProfile RecommendedProfile() => new()
     {
         ManageAdvancedSettings = true,
-        AutoContext=BaseVramMiB>0,
+        AutoContext=RecommendedAutoContext??BaseVramMiB>0,
         VisionEnabled = Vision,
+        VisionResidency = RecommendedVisionResidency,
+        CudaGraphAllowanceMiB = RecommendedCudaGraphAllowanceMiB,
+        ThinkingEnabled = RecommendedThinkingEnabled,
+        PreserveThinking = RecommendedPreserveThinking,
+        Temperature = RecommendedTemperature, TopP = RecommendedTopP, TopK = RecommendedTopK,
+        MinP = RecommendedMinP, PresencePenalty = RecommendedPresencePenalty, FrequencyPenalty = RecommendedFrequencyPenalty,
         MaxContext = RecommendedContext,
         DefaultMaxTokens = RecommendedMaxTokens,
         CustomKvCapacity = RecommendedContext,
@@ -80,7 +100,7 @@ public sealed class ModelCatalogEntry
         MtpAttentionWindow = RecommendedMtpAttentionWindow,
         NgramDraftTokens = RecommendedNgramDraftTokens,
         StructuredOutput = RecommendedStructuredOutput,
-        DeviceStateSlots = 0,
+        DeviceStateSlots = RecommendedDeviceStateSlots,
         HostStateSlots = 0,
         HostKvMiB = 0
     };
@@ -153,13 +173,17 @@ public sealed class ModelCatalog
     }
     public IReadOnlyList<ModelInfo> Snapshot()
     {
-        lock(_sync)return _entries.Select(e=>
+        lock(_sync)return _entries.Select(Describe).ToList();
+    }
+    internal ModelInfo Describe(ModelCatalogEntry e)
+    {
+        lock(_sync)
         {
             var installed=IsInstalled(e);
             RefreshMemoryMetadata(e, installed);
             return new ModelInfo(e.DisplayName,e.Repository,e.FileName,_settings.ModelIdFor(e),e.Weights,e.SizeBytes,e.Vision,e.DownloadAvailable,installed,_settings.Current.ActiveModelFile.Equals(e.FileName,StringComparison.OrdinalIgnoreCase),e.NativeContext,e.MaximumContext,SettingsService.Clone(_settings.ProfileFor(e)),e.Featured,IsRecent(e))
-            {Origin=IsExternal(e)?"ExternalLinked":e.LocalPath is not null||File.Exists(Path.Combine(_paths.ModelsDirectory,e.FileName))?"LocalManaged":"Remote",LinkedExternal=IsExternal(e),Missing=IsExternal(e)&&!File.Exists(ResolvePath(e)),Inspected=e.Inspected,InspectionMessage=e.InspectionMessage,PresetStatus=e.PresetStatus,HasMtp=e.HasMtp,HasDflash=e.HasDflash,HasDflash2=e.HasDflash2,EstimatedBaseVramMiB=e.BaseVramMiB,EstimatedKvMiBPerKToken=e.KvMiBPerKToken,EstimateKvPrecision=e.RecommendedKvPrecision,EstimateSpeculativeMode=e.RecommendedSpeculativeMode,MemoryGeometry=e.MemoryGeometry,FamilyId=e.FamilyId,FamilyDisplayName=e.FamilyDisplayName,VariantName=e.VariantName,VariantOrder=e.VariantOrder,RemoteFileName=e.RemoteFileName,Revision=e.Revision};
-        }).ToList();
+            {DefaultProfile=e.RecommendedProfile(),MinimumManagerVersion=e.MinimumManagerVersion,MinimumEngineVersion=e.MinimumEngineVersion,UpdateRequirement=ModelVersionPolicy.Requirement(e),Origin=IsExternal(e)?"ExternalLinked":e.LocalPath is not null||File.Exists(Path.Combine(_paths.ModelsDirectory,e.FileName))?"LocalManaged":"Remote",LinkedExternal=IsExternal(e),Missing=IsExternal(e)&&!File.Exists(ResolvePath(e)),Inspected=e.Inspected,InspectionMessage=e.InspectionMessage,PresetStatus=e.PresetStatus,HasMtp=e.HasMtp,HasDflash=e.HasDflash,HasDflash2=e.HasDflash2,EstimatedBaseVramMiB=e.BaseVramMiB,EstimatedKvMiBPerKToken=e.KvMiBPerKToken,EstimateKvPrecision=e.RecommendedKvPrecision,EstimateSpeculativeMode=e.RecommendedSpeculativeMode,MemoryGeometry=e.MemoryGeometry,FamilyId=e.FamilyId,FamilyDisplayName=e.FamilyDisplayName,VariantName=e.VariantName,VariantOrder=e.VariantOrder,RemoteFileName=e.RemoteFileName,Revision=e.Revision};
+        }
     }
     private void RefreshMemoryMetadata(ModelCatalogEntry entry, bool installed)
     {
@@ -237,7 +261,7 @@ public sealed class ModelCatalog
             using var response=await _http.GetAsync(ProductInfo.ModelCatalogUrl,HttpCompletionOption.ResponseHeadersRead,token);response.EnsureSuccessStatusCode();
             var feed=JsonSerializer.Deserialize<ModelCatalogFeed>(await BoundedHttpContent.ReadTextAsync(response.Content,token),SettingsService.JsonOptions)
                 ?? throw new InvalidDataException("The NInferEZ model catalog is empty.");
-            if(feed.SchemaVersion!=1||feed.Product!="NInferEZ Model Catalog")throw new InvalidDataException("The model catalog schema or product is unsupported.");
+            if(feed.SchemaVersion is not(1 or 2)||feed.Product!="NInferEZ Model Catalog")throw new InvalidDataException("The model catalog schema or product is unsupported.");
             if(feed.Models.Count>1000)throw new InvalidDataException("The model catalog contains too many entries.");
             foreach(var entry in feed.Models)ValidateRemote(entry);
             foreach(var entry in feed.Models)Merge(entry,true);
@@ -262,6 +286,8 @@ public sealed class ModelCatalog
             if(!fullProfile)current.PublishedAtUtc??=e.PublishedAtUtc;
             if(!fullProfile)
             {
+                current.MinimumManagerVersion=ModelVersionPolicy.Stronger(current.MinimumManagerVersion,e.MinimumManagerVersion);
+                current.MinimumEngineVersion=ModelVersionPolicy.Stronger(current.MinimumEngineVersion,e.MinimumEngineVersion);
                 current.ExpectedSha256=e.ExpectedSha256;current.IdentityVerified=e.IdentityVerified;current.VerifiedWriteUtc=e.VerifiedWriteUtc;current.LocalPath=e.LocalPath;
                 current.PresetStatus=e.PresetStatus;current.InvalidAdjacentPreset=e.InvalidAdjacentPreset;
                 current.IgnoredAdjacentPresetFingerprint=e.IgnoredAdjacentPresetFingerprint;
@@ -301,6 +327,12 @@ public sealed class ModelCatalog
                 current.RecommendedMtpAttentionWindow=e.RecommendedMtpAttentionWindow;
                 current.RecommendedNgramDraftTokens=e.RecommendedNgramDraftTokens;
                 current.RecommendedStructuredOutput=e.RecommendedStructuredOutput;
+                current.RecommendedAutoContext=e.RecommendedAutoContext;
+                current.MinimumManagerVersion=ModelVersionPolicy.Stronger(current.MinimumManagerVersion,e.MinimumManagerVersion);current.MinimumEngineVersion=ModelVersionPolicy.Stronger(current.MinimumEngineVersion,e.MinimumEngineVersion);
+                current.RecommendedVisionResidency=e.RecommendedVisionResidency;current.RecommendedCudaGraphAllowanceMiB=e.RecommendedCudaGraphAllowanceMiB;
+                current.RecommendedDeviceStateSlots=e.RecommendedDeviceStateSlots;current.RecommendedThinkingEnabled=e.RecommendedThinkingEnabled;current.RecommendedPreserveThinking=e.RecommendedPreserveThinking;
+                current.RecommendedTemperature=e.RecommendedTemperature;current.RecommendedTopP=e.RecommendedTopP;current.RecommendedTopK=e.RecommendedTopK;
+                current.RecommendedMinP=e.RecommendedMinP;current.RecommendedPresencePenalty=e.RecommendedPresencePenalty;current.RecommendedFrequencyPenalty=e.RecommendedFrequencyPenalty;
             }
         }
     }
@@ -309,7 +341,8 @@ public sealed class ModelCatalog
             || (!string.IsNullOrWhiteSpace(entry.RemoteFileName)&&entry.RemoteFileName.Equals(file.Name,StringComparison.OrdinalIgnoreCase)));
     private static void ValidateRemote(ModelCatalogEntry entry)
     {
-        if(Path.GetFileName(entry.FileName)!=entry.FileName||!entry.FileName.EndsWith(".ninfer",StringComparison.OrdinalIgnoreCase)
+        if(!ModelVersionPolicy.IsValidMinimum(entry.MinimumManagerVersion)||!ModelVersionPolicy.IsValidMinimum(entry.MinimumEngineVersion)
+            ||Path.GetFileName(entry.FileName)!=entry.FileName||!entry.FileName.EndsWith(".ninfer",StringComparison.OrdinalIgnoreCase)
             ||!IsPublisherModel(entry)||entry.Repository.Split('/').Length!=2||entry.Revision.Length!=40||!entry.Revision.All(Uri.IsHexDigit)
             ||entry.Sha256.Length!=64||!entry.Sha256.All(Uri.IsHexDigit)||entry.SizeBytes<=0||entry.ArtifactVersion!=3
             ||entry.RecommendedContext is <1024 or >1048576||entry.MaximumContext is <1024 or >1048576||entry.RecommendedContext>entry.MaximumContext)
@@ -485,6 +518,9 @@ public sealed class ModelCatalog
     {
         using var document=JsonDocument.Parse(File.ReadAllText(path));
         entry.ExpectedSha256=document.RootElement.GetProperty("model").GetProperty("sha256").GetString();
+        var requirements=ModelPresetImporter.Requirements(document.RootElement);
+        entry.MinimumManagerVersion=ModelVersionPolicy.Stronger(entry.MinimumManagerVersion,requirements.Manager);
+        entry.MinimumEngineVersion=ModelVersionPolicy.Stronger(entry.MinimumEngineVersion,requirements.Engine);
         entry.PresetStatus=$"{document.RootElement.GetProperty("mode").GetString()} settings imported; model identity {(entry.IdentityVerified?"verified":"unverified (use Verify to check SHA-256)")}.";
     }
     public ModelCatalogEntry Relink(ModelCatalogEntry entry,string path)
@@ -498,6 +534,48 @@ public sealed class ModelCatalog
         entry.InspectedModelPath=null;ValidateCachedInspection(entry);
         SaveCache();
         return entry;
+    }
+    public Task ResolveVersionRequirementsAsync(ModelCatalogEntry entry,CancellationToken token=default)
+        => ResolveVersionRequirementsCoreAsync(entry,token);
+    internal async Task ResolveVersionRequirementsCoreAsync(ModelCatalogEntry entry,CancellationToken token,Func<string,CancellationToken,Task<string>>? hashFile=null)
+    {
+        if(entry.Repository!="Local file")return;
+        var candidates=Entries.Where(e=>e!=entry && e.SizeBytes==entry.SizeBytes && (!string.IsNullOrEmpty(e.MinimumManagerVersion)||!string.IsNullOrEmpty(e.MinimumEngineVersion))).ToArray();
+        if(candidates.Length==0)return;
+        var path=ResolvePath(entry);var file=new FileInfo(path);
+        if(!file.Exists){entry.IdentityVerified=false;throw new FileNotFoundException("The local model is missing; its version requirements were retained.",path);}
+        if(file.Length!=entry.SizeBytes){entry.IdentityVerified=false;throw new IOException("The local model changed size. Relink it before loading; its version requirements were retained.");}
+        var stamp=file.LastWriteTimeUtc;
+        var expected=entry.ExpectedSha256??entry.Sha256;
+        var cached=entry.IdentityVerified && entry.VerifiedWriteUtc==stamp && expected.Length==64 && expected.All(Uri.IsHexDigit);
+        string hash;
+        if(cached)hash=expected;
+        else
+        {
+            entry.IdentityVerified=false;
+            if(hashFile is not null)hash=await hashFile(path,token);
+            else
+            {
+                await using var stream=File.OpenRead(path);
+                hash=Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(stream,token));
+            }
+            file.Refresh();
+            if(!file.Exists || file.Length!=entry.SizeBytes || file.LastWriteTimeUtc!=stamp)
+                throw new IOException("The local model changed during verification. Retry before loading; its version requirements were retained.");
+        }
+        var matches=candidates.Where(e=>hash.Equals(e.Sha256,StringComparison.OrdinalIgnoreCase)).ToArray();
+        foreach(var known in matches)
+        {
+            entry.MinimumManagerVersion=ModelVersionPolicy.Stronger(entry.MinimumManagerVersion,known.MinimumManagerVersion);
+            entry.MinimumEngineVersion=ModelVersionPolicy.Stronger(entry.MinimumEngineVersion,known.MinimumEngineVersion);
+        }
+        if(matches.Length>0)
+        {
+            entry.ExpectedSha256=hash;
+            entry.VerifiedWriteUtc=stamp;
+            entry.IdentityVerified=true;
+        }
+        SaveCache();
     }
     public async Task InspectAsync(ModelCatalogEntry entry,string engineDirectory,CancellationToken token=default)
     {

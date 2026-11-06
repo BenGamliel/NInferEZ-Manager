@@ -26,6 +26,7 @@ public static class ProfileSettingsPolicy
         nameof(ModelProfile.MaxSharedPrefixes), nameof(ModelProfile.MaxLongAnchorsPerContinuation), nameof(ModelProfile.MaxCacheMarkersPerRequest),
         nameof(ModelProfile.AlternativePrefixCache), nameof(ModelProfile.LogLevel), nameof(ModelProfile.LogStatsIntervalMs),
         nameof(ModelProfile.ChatTemplateFile), nameof(ModelProfile.ContextCostPresetsFile), nameof(ModelProfile.RequestLogJsonlFile),
+        nameof(ModelProfile.VisionResidency), nameof(ModelProfile.CudaGraphAllowanceMiB),
         nameof(ModelProfile.PrefillChunk), nameof(ModelProfile.DraftTokens), nameof(ModelProfile.CudaGraphEnabled), nameof(ModelProfile.PrefixReuseEnabled)
     ];
     private static readonly IReadOnlyDictionary<string, PropertyInfo> Properties = AdvancedProperties
@@ -55,7 +56,15 @@ public static class ProfileSettingsPolicy
         if (enabled && !selected.ManageAdvancedSettings) next.ManualAdvancedSettings = CaptureAdvanced(selected);
         if (!enabled && selected.ManageAdvancedSettings && next.ManualAdvancedSettings is { } backup) RestoreAdvanced(next, backup);
         next.ManageAdvancedSettings = enabled;
-        return enabled ? Managed(next, recommended) : next;
+        if (enabled) return Managed(next, recommended);
+        ApplyVisionDefault(next, recommended);
+        return next;
+    }
+
+    public static void ApplyVisionDefault(ModelProfile profile, ModelProfile recommended)
+    {
+        if (profile.VisionEnabled && profile.MediaLiveMiB == 0)
+            profile.MediaLiveMiB = recommended.MediaLiveMiB;
     }
 
     public static ModelProfile Managed(ModelProfile selected, ModelProfile recommended)
@@ -101,11 +110,12 @@ public static class ProfileSettingsPolicy
     {
         nameof(ModelProfile.LmHeadDraft) or nameof(ModelProfile.NgramDraftTokens) or nameof(ModelProfile.DraftTokens) => profile.SpeculativeMode != SpeculativeMode.Disabled,
         nameof(ModelProfile.MtpAttentionWindow) => profile.SpeculativeMode == SpeculativeMode.Mtp,
-        nameof(ModelProfile.CustomKvCapacity) => profile.KvCapacityMode == KvCapacityMode.Custom,
-        nameof(ModelProfile.KvHeadroomMiB) => profile.KvCapacityMode == KvCapacityMode.Auto,
+        nameof(ModelProfile.KvCapacityMode) => !profile.AutoContext,
+        nameof(ModelProfile.CustomKvCapacity) => !profile.AutoContext && profile.KvCapacityMode == KvCapacityMode.Custom,
+        nameof(ModelProfile.KvHeadroomMiB) => profile.AutoContext || profile.KvCapacityMode == KvCapacityMode.Auto,
         nameof(ModelProfile.HostKvMiB) or nameof(ModelProfile.HostStateSlots) => profile.HostCacheMiB is null && !profile.AlternativePrefixCache,
         nameof(ModelProfile.DeviceStateSlots) or nameof(ModelProfile.MaxPrivateContinuations) or nameof(ModelProfile.MaxSharedPrefixes) or nameof(ModelProfile.MaxLongAnchorsPerContinuation) => !profile.AlternativePrefixCache,
-        nameof(ModelProfile.MediaCacheMiB) or nameof(ModelProfile.MediaLiveMiB) or nameof(ModelProfile.MediaPreprocessThreads) => supportsVision && profile.VisionEnabled,
+        nameof(ModelProfile.VisionResidency) or nameof(ModelProfile.MediaCacheMiB) or nameof(ModelProfile.MediaLiveMiB) or nameof(ModelProfile.MediaPreprocessThreads) => supportsVision && profile.VisionEnabled,
         nameof(ModelProfile.DefaultThinkingBudget) => profile.ThinkingEnabled,
         nameof(ModelProfile.Temperature) or nameof(ModelProfile.TopP) or nameof(ModelProfile.TopK) or nameof(ModelProfile.MinP) => !profile.Greedy,
         _ => true

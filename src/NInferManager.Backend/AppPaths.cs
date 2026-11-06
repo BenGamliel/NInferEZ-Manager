@@ -2,9 +2,10 @@ namespace NInferManager.Backend;
 
 public sealed class AppPaths
 {
-    public AppPaths()
+    public AppPaths() : this(null) { }
+    internal AppPaths(string? appDirectoryForTest)
     {
-        var processDirectory = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        var processDirectory = appDirectoryForTest ?? Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
         AppDirectory = Path.GetFileName(processDirectory).Equals("Backend", StringComparison.OrdinalIgnoreCase)
             ? Directory.GetParent(processDirectory)?.FullName ?? processDirectory
             : processDirectory;

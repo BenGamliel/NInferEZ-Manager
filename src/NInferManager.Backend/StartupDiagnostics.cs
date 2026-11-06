@@ -1,7 +1,31 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+
 namespace NInferManager.Backend;
 
 public static class StartupDiagnostics
 {
+    private static readonly Regex ContextCapacityNumbers = new(
+        @"Engine runtime reservation requires (?<required>[0-9]+) bytes(?: in addition to (?<reserve>[0-9]+) bytes of automatic headroom)?, but only (?<available>[0-9]+) bytes",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    internal static bool IsContextCapacityFailure(string detail) =>
+        detail.Contains("Engine runtime reservation requires", StringComparison.OrdinalIgnoreCase)
+        || detail.Contains("automatic KV headroom requires", StringComparison.OrdinalIgnoreCase)
+        || (detail.Contains("CUDA", StringComparison.OrdinalIgnoreCase)
+            && detail.Contains("out of memory", StringComparison.OrdinalIgnoreCase));
+
+    internal static long ContextCapacityShortfall(string detail)
+    {
+        var match = ContextCapacityNumbers.Match(detail);
+        if (!match.Success
+            || !long.TryParse(match.Groups["required"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var required)
+            || !long.TryParse(match.Groups["available"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var available))
+            return 0;
+        long.TryParse(match.Groups["reserve"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var reserve);
+        return required <= long.MaxValue - reserve ? Math.Max(0, required + reserve - available) : 0;
+    }
+
     public static string UserMessage(string detail)
     {
         if (detail.Contains("runtime reservation", StringComparison.OrdinalIgnoreCase)

@@ -10,8 +10,7 @@ internal static class SettingDescriptors
     public static IReadOnlyList<SettingDescriptor> Application { get; } =
     [
         new("CatalogCheckHours", "Model catalog interval (hours)", "Checks are cached. Lower values do not make local model loading faster.", "Background checks", 1, 168),
-        new("EngineCheckHours", "Engine catalog interval (hours)", "How often a requested engine catalog refresh may check online.", "Background checks", 1, 168),
-        new("UpdateCheckHours", "Application update interval (hours)", "Updates are offered, never installed silently during inference.", "Background checks", 1, 168)
+        new("UpdateCheckHours", "NInferEZ update interval (hours)", "Updates are offered, never installed silently during inference.", "Background checks", 1, 168)
     ];
 
     public static IReadOnlyList<SettingDescriptor> Profile { get; } =
@@ -46,6 +45,8 @@ internal static class SettingDescriptors
         new("StructuredOutput", "Structured output mode", "Enables the engine's supported constrained-output route. Requires compatible client requests.", "API limits"),
         new("ResponseStoreMaxRecords", "Response history records", "Maximum retained Responses API records. This engine requires at least one record.", "API limits", 1, 100000),
         new("ResponseStoreMaxMiB", "Response history memory (MiB)", "Memory budget for the engine's response store; must be at least 1 MiB.", "API limits", 1, 16384),
+        new("VisionResidency", "Vision memory residency", "resident keeps vision weights in GPU memory; overlay reuses its allocation between text and image work. Use the model’s tested recommendation.", "Vision", VisionOnly:true),
+        new("CudaGraphAllowanceMiB", "CUDA graph reserve (MiB)", "Optional graph memory planning reserve. Empty keeps the engine default; use a value measured for this profile.", "Acceleration", 0, 65536),
         new("MediaCacheMiB", "Image cache budget (MiB)", "Only applicable to vision models; cached media consumes memory.", "Vision", 0, 65536, VisionOnly:true),
         new("MediaLiveMiB", "Live image budget (MiB)", "Limits memory for active image processing. Must be at least 1 MiB with vision on; omitted from the launch command with vision off.", "Vision", 1, 65536, VisionOnly:true),
         new("MediaPreprocessThreads", "Image preprocessing threads", "Zero lets the engine choose automatically. This engine accepts up to 64 workers.", "Vision", 0, 64, VisionOnly:true),

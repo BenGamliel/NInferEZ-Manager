@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/NInferManager.Backend/NInferManager.Backend.csproj" />
+    <ProjectReference Include="../NInferManager.FakeEngine/NInferManager.FakeEngine.csproj" ReferenceOutputAssembly="false" />
     <Compile Include="../../src/NInferManager.WinUI/SpeculativeChoices.cs" Link="SpeculativeChoices.cs" />
   </ItemGroup>
 </Project>

@@ -15,7 +15,7 @@ public sealed class ConverterRunner(AppPaths paths) : IConverterRunner
     public async Task<int> RunAsync(string command, string request, Action<JsonElement> onEvent,
         Action<string> onDiagnostic, CancellationToken cancellation)
     {
-        var root = Path.Combine(paths.AppDirectory, "Converter");
+        var root = await ConverterRuntime.EnsureAsync(paths,cancellation);
         var exe = Path.Combine(root, "NInferEZ.Converter.Backend.exe");
         if (!File.Exists(exe) || !File.Exists(Path.Combine(root,"runtime","python","python.exe")))
             throw new FileNotFoundException("The conversion runtime is missing. Extract the complete Manager package, including its Converter folder.");

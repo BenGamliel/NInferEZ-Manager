@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "product": "NInferEZ Manager",
+  "managerVersion": "1.1.0",
+  "approved": true,
+  "packages": [
+    {
+      "engineVersion": "1.1.0",
+      "contractVersion": 1,
+      "platform": "windows-x64",
+      "cudaArchitecture": "sm120a",
+      "gpuFamily": "NVIDIA Blackwell GPUs with compute capability 12.0 (sm120a build)",
+      "gpuModels": [
+        "NVIDIA GeForce RTX 5090",
+        "NVIDIA GeForce RTX 5080",
+        "NVIDIA RTX PRO 6000 Blackwell"
+      ],
+      "nativeNvfp4": true,
+      "channel": "stable",
+      "qualification": "hardware-qualified",
+      "fileName": "NInferEZ-Engine-1.1.0-sm120a-windows-x64-r3.zip",
+      "sizeBytes": 1116653060,
+      "sha256": "2d7b5079d2c6960d487465efa614eee8df96cd70947018a12f385f3626dd1fd2",
+      "url": "https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v1.1.0/NInferEZ-Engine-1.1.0-sm120a-windows-x64-r3.zip"
+    },
+    {
+      "engineVersion": "1.1.0",
+      "contractVersion": 1,
+      "platform": "windows-x64",
+      "cudaArchitecture": "sm86",
+      "gpuFamily": "NVIDIA Ampere GPUs with compute capability 8.6",
+      "gpuModels": [
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA GeForce RTX 3090 Ti"
+      ],
+      "nativeNvfp4": false,
+      "channel": "preview",
+      "qualification": "build-verified-preview",
+      "fileName": "NInferEZ-Engine-1.1.0-sm86-windows-x64-r3.zip",
+      "sizeBytes": 1336771370,
+      "sha256": "9b1ee1d990149e94f16c6d14530d040e22cde813c8f2dcb2d6e8e1f0f55a8de9",
+      "url": "https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v1.1.0/NInferEZ-Engine-1.1.0-sm86-windows-x64-r3.zip"
+    },
+    {
+      "engineVersion": "1.1.0",
+      "contractVersion": 1,
+      "platform": "windows-x64",
+      "cudaArchitecture": "sm89",
+      "gpuFamily": "NVIDIA Ada GPUs with compute capability 8.9",
+      "gpuModels": [
+        "NVIDIA GeForce RTX 4090"
+      ],
+      "nativeNvfp4": false,
+      "channel": "preview",
+      "qualification": "build-verified-preview",
+      "fileName": "NInferEZ-Engine-1.1.0-sm89-windows-x64-r3.zip",
+      "sizeBytes": 1328297757,
+      "sha256": "4a21b41d5e9fc5bf8ac696ce701801a69a2a05a6bc9397716ff7f029c3bb00e3",
+      "url": "https://github.com/BenGamliel/NInferEZ-Engine/releases/download/v1.1.0/NInferEZ-Engine-1.1.0-sm89-windows-x64-r3.zip"
+    }
+  ]
+}
